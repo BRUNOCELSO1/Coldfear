@@ -1,9 +1,15 @@
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm'
+
 const PT = new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' })
 const TZ = 'Europe/Lisbon'
 const qs = (s, el=document) => el.querySelector(s)
 const qsa = (s, el=document) => [...el.querySelectorAll(s)]
 
 const DB_KEY = 'cf_data_v1'
+let storageMode = 'local'
+let supabase = null
+let supabaseCfg = null
+
 const STAGES = [
   { id: 'novo', label: 'Novo' },
   { id: 'contactado', label: 'Contactado' },
@@ -29,6 +35,7 @@ const VIEW_META = {
 const NAME_RE = /^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ' -]{1,79}$/
 
 function loadDB(){
+  if(storageMode !== 'local') return { customers: [], sales: [], investments: [] }
   try{
     const parsed = JSON.parse(localStorage.getItem(DB_KEY))
     if(parsed) return parsed
@@ -38,6 +45,7 @@ function loadDB(){
   return next
 }
 function saveDB(next){
+  if(storageMode !== 'local') return
   localStorage.setItem(DB_KEY, JSON.stringify(next))
 }
 function normalizePhone(phone){
@@ -93,9 +101,7 @@ function normalizeDB(next){
 
   return next
 }
-
-let db = normalizeDB(loadDB())
-saveDB(db)
+let db = normalizeDB({ customers: [], sales: [], investments: [] })
 
 function setHidden(id, hidden){
   const el = qs(id)
@@ -162,6 +168,161 @@ function getAuthConfig(){
   const passwordSha256 = String(cfg.passwordSha256||'').trim()
   if(!login || !passwordSha256) return null
   return { login, passwordSha256 }
+}
+
+function loadSupabaseConfigScript(){
+  if(window.CF_SUPABASE && typeof window.CF_SUPABASE === 'object') return Promise.resolve(true)
+  return new Promise(resolve=>{
+    const existing = document.querySelector('script[data-supabase-config]')
+    if(existing) return resolve(window.CF_SUPABASE && typeof window.CF_SUPABASE === 'object')
+    const s = document.createElement('script')
+    s.src = './supabase-config.js'
+    s.defer = true
+    s.dataset.supabaseConfig = '1'
+    s.onload = () => resolve(window.CF_SUPABASE && typeof window.CF_SUPABASE === 'object')
+    s.onerror = () => resolve(false)
+    document.head.appendChild(s)
+  })
+}
+function getSupabaseConfig(){
+  const cfg = window.CF_SUPABASE
+  if(!cfg || typeof cfg !== 'object') return null
+  const url = String(cfg.url||'').trim()
+  const anonKey = String(cfg.anonKey||'').trim()
+  const loginAlias = String(cfg.loginAlias||'').trim()
+  const loginEmail = String(cfg.loginEmail||'').trim()
+  if(!url || !anonKey) return null
+  return { url, anonKey, loginAlias, loginEmail }
+}
+async function initStorage(){
+  await loadSupabaseConfigScript()
+  const cfg = getSupabaseConfig()
+  if(cfg){
+    storageMode = 'supabase'
+    supabaseCfg = cfg
+    supabase = createClient(cfg.url, cfg.anonKey)
+  }else{
+    const host = String(window.location?.hostname || '').toLowerCase()
+    const isDevHost = host === 'localhost' || host === '127.0.0.1' || host === '::1'
+    if(!isDevHost){
+      storageMode = 'supabase_required'
+      supabaseCfg = null
+      supabase = null
+      return
+    }
+    storageMode = 'local'
+    supabaseCfg = null
+    supabase = null
+    db = normalizeDB(loadDB())
+    saveDB(db)
+  }
+}
+function resolveLoginEmail(rawLogin){
+  const login = String(rawLogin||'').trim()
+  if(!supabaseCfg) return login
+  if(supabaseCfg.loginAlias && login === supabaseCfg.loginAlias && supabaseCfg.loginEmail) return supabaseCfg.loginEmail
+  if(login.includes('@')) return login
+  if(supabaseCfg.loginEmail) return supabaseCfg.loginEmail
+  return login
+}
+async function getRemoteSession(){
+  if(storageMode !== 'supabase' || !supabase) return null
+  const { data } = await supabase.auth.getSession()
+  return data?.session || null
+}
+async function remoteSignIn(login, password){
+  const email = resolveLoginEmail(login)
+  const { error } = await supabase.auth.signInWithPassword({ email, password })
+  if(error) throw error
+}
+async function remoteSignOut(){
+  if(storageMode !== 'supabase' || !supabase) return
+  await supabase.auth.signOut()
+}
+let remoteSyncTimer = null
+let remoteSyncBound = false
+async function remoteSyncOnce(){
+  try{
+    if(storageMode !== 'supabase' || !supabase) return
+    if(document.hidden) return
+    const s = await getRemoteSession()
+    if(!s) return
+    await pullRemoteDB()
+    refreshAll()
+  }catch{}
+}
+function startRemoteSync(){
+  if(storageMode !== 'supabase' || !supabase) return
+  if(!remoteSyncBound){
+    document.addEventListener('visibilitychange', remoteSyncOnce)
+    remoteSyncBound = true
+  }
+  if(remoteSyncTimer) return
+  remoteSyncTimer = setInterval(remoteSyncOnce, 5000)
+}
+function stopRemoteSync(){
+  if(remoteSyncTimer){
+    clearInterval(remoteSyncTimer)
+    remoteSyncTimer = null
+  }
+}
+function formatSupabaseAuthError(err){
+  const msg = String(err?.message || 'Falha ao autenticar.')
+  const status = err?.status ? ` (status ${err.status})` : ''
+  const name = err?.name ? ` — ${err.name}` : ''
+  return `${msg}${status}${name}`
+}
+function mapCustomerRow(r){
+  return {
+    id: r.id,
+    name: String(r.name||'').trim() || 'Sem nome',
+    phone: String(r.phone||'').trim(),
+    source: r.source || 'Facebook',
+    profileUrl: r.profile_url || '',
+    notes: r.notes || '',
+    stage: STAGES.some(s=>s.id===r.stage) ? r.stage : 'novo',
+    createdAt: r.created_at || new Date().toISOString(),
+    movedAt: r.moved_at ? new Date(r.moved_at).getTime() : null
+  }
+}
+function mapSaleRow(r){
+  return {
+    id: r.id,
+    customerId: r.customer_id,
+    occurredAt: r.occurred_at || new Date().toISOString(),
+    amount: Number(r.amount||0),
+    sellerId: SELLERS.some(x=>x.id===r.seller_id) ? r.seller_id : (SELLERS[0]?.id || 'jusepp'),
+    paymentMethod: r.payment_method || '',
+    notes: r.notes || '',
+    createdAt: r.created_at || new Date().toISOString()
+  }
+}
+function mapInvestmentRow(r){
+  return {
+    id: r.id,
+    platform: r.platform || 'FACEBOOK',
+    campaign: r.campaign || '',
+    occurredOn: r.occurred_on || todayISO(),
+    amount: Number(r.amount||0),
+    notes: r.notes || '',
+    createdAt: r.created_at || new Date().toISOString()
+  }
+}
+async function pullRemoteDB(){
+  if(storageMode !== 'supabase' || !supabase) return
+  const [{ data: customers, error: e1 }, { data: sales, error: e2 }, { data: investments, error: e3 }] = await Promise.all([
+    supabase.from('customers').select('*').limit(5000),
+    supabase.from('sales').select('*').limit(10000),
+    supabase.from('investments').select('*').limit(10000)
+  ])
+  if(e1) throw e1
+  if(e2) throw e2
+  if(e3) throw e3
+  db = normalizeDB({
+    customers: (customers || []).map(mapCustomerRow),
+    sales: (sales || []).map(mapSaleRow),
+    investments: (investments || []).map(mapInvestmentRow)
+  })
 }
 
 function fmtMoney(n){ return PT.format(Number(n||0)) }
@@ -240,7 +401,13 @@ function applyGlobalSearch(query){
   }
 }
 
-qs('#btn-refresh')?.addEventListener('click', ()=>{
+qs('#btn-refresh')?.addEventListener('click', async ()=>{
+  try{
+    if(storageMode === 'supabase'){
+      const session = await getRemoteSession()
+      if(session) await pullRemoteDB()
+    }
+  }catch{}
   refreshAll()
 })
 
@@ -254,7 +421,7 @@ qs('#global-search')?.addEventListener('keydown', e=>{
   applyGlobalSearch(e.target.value)
 })
 
-function upsertCustomer({name, phone, source, profileUrl, notes, stage}){
+async function upsertCustomer({name, phone, source, profileUrl, notes, stage}){
   const nextName = String(name||'').trim() || 'Sem nome'
   const nextPhone = String(phone||'').trim()
   const phoneKey = normalizePhone(nextPhone)
@@ -262,58 +429,150 @@ function upsertCustomer({name, phone, source, profileUrl, notes, stage}){
     const exists = db.customers.find(c => normalizePhone(c.phone) === phoneKey)
     if(exists) return exists
   }
-  const c = {
-    id: crypto.randomUUID(),
-    name: nextName,
-    phone: nextPhone,
-    source: source || 'Facebook',
-    profileUrl: profileUrl || '',
-    notes: notes || '',
-    stage: STAGES.some(s=>s.id===stage) ? stage : 'novo',
-    createdAt: new Date().toISOString(),
-    movedAt: null
+  if(storageMode === 'supabase' && supabase){
+    const row = {
+      name: nextName,
+      phone: nextPhone || null,
+      source: source || 'Facebook',
+      profile_url: profileUrl || null,
+      notes: notes || null,
+      stage: STAGES.some(s=>s.id===stage) ? stage : 'novo'
+    }
+    const { data, error } = await supabase.from('customers').insert(row).select('*').single()
+    if(error) throw error
+    const c = mapCustomerRow(data)
+    db.customers.push(c)
+    return c
+  }else{
+    const c = {
+      id: crypto.randomUUID(),
+      name: nextName,
+      phone: nextPhone,
+      source: source || 'Facebook',
+      profileUrl: profileUrl || '',
+      notes: notes || '',
+      stage: STAGES.some(s=>s.id===stage) ? stage : 'novo',
+      createdAt: new Date().toISOString(),
+      movedAt: null
+    }
+    db.customers.push(c)
+    saveDB(db)
+    return c
   }
-  db.customers.push(c)
-  saveDB(db)
-  return c
 }
-function addSale({customerId, quickCustomer, occurredAt, amount, sellerId, paymentMethod, notes}){
+async function addSale({customerId, quickCustomer, occurredAt, amount, sellerId, paymentMethod, notes}){
   let cId = customerId
   if(!cId && quickCustomer){
-    const c = upsertCustomer({
+    const c = await upsertCustomer({
       name: quickCustomer.name || 'Sem nome',
       phone: quickCustomer.phone || '',
       stage: 'novo'
     })
     cId = c.id
   }
-  const s = {
-    id: crypto.randomUUID(),
-    customerId: cId,
-    occurredAt: occurredAt || new Date().toISOString(),
-    amount: Number(amount||0),
-    sellerId: SELLERS.some(x=>x.id===sellerId) ? sellerId : (SELLERS[0]?.id || 'jusepp'),
-    paymentMethod: paymentMethod || '',
-    notes: notes || '',
-    createdAt: new Date().toISOString()
+  if(storageMode === 'supabase' && supabase){
+    const row = {
+      customer_id: cId,
+      occurred_at: occurredAt || new Date().toISOString(),
+      amount: Number(amount||0),
+      seller_id: SELLERS.some(x=>x.id===sellerId) ? sellerId : (SELLERS[0]?.id || 'jusepp'),
+      payment_method: paymentMethod || null,
+      notes: notes || null
+    }
+    const { data, error } = await supabase.from('sales').insert(row).select('*').single()
+    if(error) throw error
+    const s = mapSaleRow(data)
+    db.sales.push(s)
+    return s
+  }else{
+    const s = {
+      id: crypto.randomUUID(),
+      customerId: cId,
+      occurredAt: occurredAt || new Date().toISOString(),
+      amount: Number(amount||0),
+      sellerId: SELLERS.some(x=>x.id===sellerId) ? sellerId : (SELLERS[0]?.id || 'jusepp'),
+      paymentMethod: paymentMethod || '',
+      notes: notes || '',
+      createdAt: new Date().toISOString()
+    }
+    db.sales.push(s)
+    saveDB(db)
+    return s
   }
-  db.sales.push(s)
-  saveDB(db)
-  return s
 }
-function addInvestment({platform, campaign, occurredOn, amount, notes}){
-  const inv = {
-    id: crypto.randomUUID(),
-    platform: platform || 'FACEBOOK',
-    campaign: campaign || '',
-    occurredOn: occurredOn || todayISO(),
-    amount: Number(amount||0),
-    notes: notes || '',
-    createdAt: new Date().toISOString()
+async function addInvestment({platform, campaign, occurredOn, amount, notes}){
+  if(storageMode === 'supabase' && supabase){
+    const row = {
+      platform: platform || 'FACEBOOK',
+      campaign: campaign || null,
+      occurred_on: occurredOn || todayISO(),
+      amount: Number(amount||0),
+      notes: notes || null
+    }
+    const { data, error } = await supabase.from('investments').insert(row).select('*').single()
+    if(error) throw error
+    const inv = mapInvestmentRow(data)
+    db.investments.push(inv)
+    return inv
+  }else{
+    const inv = {
+      id: crypto.randomUUID(),
+      platform: platform || 'FACEBOOK',
+      campaign: campaign || '',
+      occurredOn: occurredOn || todayISO(),
+      amount: Number(amount||0),
+      notes: notes || '',
+      createdAt: new Date().toISOString()
+    }
+    db.investments.push(inv)
+    saveDB(db)
+    return inv
   }
-  db.investments.push(inv)
-  saveDB(db)
-  return inv
+}
+
+async function updateCustomerName(customerId, nextName){
+  const c = db.customers.find(c=>c.id===customerId)
+  if(!c) return
+  c.name = nextName
+  if(storageMode === 'supabase' && supabase){
+    const { error } = await supabase.from('customers').update({ name: nextName }).eq('id', customerId)
+    if(error) throw error
+  }else{
+    saveDB(db)
+  }
+}
+async function deleteSale(id){
+  db.sales = db.sales.filter(x=>x.id!==id)
+  if(storageMode === 'supabase' && supabase){
+    const { error } = await supabase.from('sales').delete().eq('id', id)
+    if(error) throw error
+  }else{
+    saveDB(db)
+  }
+}
+async function deleteInvestment(id){
+  db.investments = db.investments.filter(x=>x.id!==id)
+  if(storageMode === 'supabase' && supabase){
+    const { error } = await supabase.from('investments').delete().eq('id', id)
+    if(error) throw error
+  }else{
+    saveDB(db)
+  }
+}
+async function deleteCustomerAndSales(customerId){
+  const saleIds = db.sales.filter(s=>s.customerId===customerId).map(s=>s.id)
+  db.sales = db.sales.filter(s=>s.customerId!==customerId)
+  db.customers = db.customers.filter(c=>c.id!==customerId)
+  if(storageMode === 'supabase' && supabase){
+    if(saleIds.length){
+      const { error: e1 } = await supabase.from('sales').delete().in('id', saleIds)
+      if(e1) throw e1
+    }
+    const { error: e2 } = await supabase.from('customers').delete().eq('id', customerId)
+    if(e2) throw e2
+  }else{
+    saveDB(db)
+  }
 }
 
 function computeMetrics(range){
@@ -356,20 +615,34 @@ function updateKPIs(){
   qs('#kpi-ticket-medio').textContent = m.numSales? fmtMoney(m.ticket): '—'
   qs('#kpi-total-investido').textContent = fmtMoney(m.totalInvested)
   qs('#kpi-roi').textContent = m.roi===null ? '—' : `${m.roi.toFixed(1)}%`
-  renderChart()
+  renderChart(m)
   renderRecent(m)
 }
 
 let chart
-function renderChart(){
-  const days = []
-  for(let i=29;i>=0;i--){
-    const d = new Date(Date.now()-i*86400000)
-    days.push(d.toISOString().slice(0,10))
+function renderChart(m){
+  const maxDays = 120
+  const end = m?.to ? new Date(m.to) : new Date()
+  let start = m?.from ? new Date(m.from) : new Date(Date.now()-29*86400000)
+  start.setHours(12,0,0,0)
+  end.setHours(12,0,0,0)
+  const rangeDays = Math.floor((end.getTime()-start.getTime())/86400000)+1
+  if(rangeDays > maxDays){
+    start = new Date(end.getTime() - (maxDays-1)*86400000)
+    start.setHours(12,0,0,0)
   }
-  const series = days.map(day=>{
-    return db.sales.filter(s=>s.occurredAt.slice(0,10)===day).reduce((a,b)=>a+b.amount,0)
+
+  const days = []
+  for(let t=start.getTime(); t<=end.getTime() && days.length<maxDays; t+=86400000){
+    days.push(new Date(t).toISOString().slice(0,10))
+  }
+
+  const dayTotals = new Map()
+  ;(m?.sales || db.sales).forEach(s=>{
+    const k = dayKeyFromISO(s.occurredAt)
+    dayTotals.set(k, (dayTotals.get(k)||0) + Number(s.amount||0))
   })
+  const series = days.map(d=> dayTotals.get(d) || 0)
   const ctx = qs('#salesChart').getContext('2d')
   if(chart) chart.destroy()
   chart = new Chart(ctx, {
@@ -492,15 +765,18 @@ function renderClientes(list=db.customers){
           <button data-del="${c.id}" class="btn danger">Remover</button>
         </div>
       `
-      div.querySelector('[data-del]').addEventListener('click', ()=>{
+      div.querySelector('[data-del]').addEventListener('click', async ()=>{
         const ok = confirm('Remover cliente e as vendas associadas?')
         if(!ok) return
-        db.sales = db.sales.filter(s=>s.customerId!==c.id)
-        db.customers = db.customers.filter(x=>x.id!==c.id)
-        saveDB(db)
-        refreshAll()
+        setError('#cliente-error', '')
+        try{
+          await deleteCustomerAndSales(c.id)
+          refreshAll()
+        }catch(err){
+          setError('#cliente-error', err?.message || 'Erro ao remover cliente.')
+        }
       })
-      div.querySelector('[data-edit]').addEventListener('click', ()=>{
+      div.querySelector('[data-edit]').addEventListener('click', async ()=>{
         const next = prompt('Editar nome completo:', c.name)
         if(next===null) return
         const v = validateFullName(next)
@@ -508,10 +784,13 @@ function renderClientes(list=db.customers){
           setError('#cliente-error', v.message)
           return
         }
-        c.name = v.value
-        saveDB(db)
         setError('#cliente-error', '')
-        refreshAll()
+        try{
+          await updateCustomerName(c.id, v.value)
+          refreshAll()
+        }catch(err){
+          setError('#cliente-error', err?.message || 'Erro ao atualizar cliente.')
+        }
       })
       el.appendChild(div)
     })
@@ -533,11 +812,12 @@ function renderVendas(){
       </div>
       <div class="row"><button data-del="${s.id}" class="btn danger">Remover</button></div>
     `
-    div.querySelector('[data-del]').addEventListener('click', ()=>{
-      db.sales = db.sales.filter(x=>x.id!==s.id)
-      saveDB(db)
-      renderVendas()
-      updateKPIs()
+    div.querySelector('[data-del]').addEventListener('click', async ()=>{
+      try{
+        await deleteSale(s.id)
+        renderVendas()
+        updateKPIs()
+      }catch(err){}
     })
     el.appendChild(div)
   })
@@ -557,11 +837,12 @@ function renderInvestimentos(){
       </div>
       <div class="row"><button data-del="${i.id}" class="btn danger">Remover</button></div>
     `
-    div.querySelector('[data-del]').addEventListener('click', ()=>{
-      db.investments = db.investments.filter(x=>x.id!==i.id)
-      saveDB(db)
-      renderInvestimentos()
-      updateKPIs()
+    div.querySelector('[data-del]').addEventListener('click', async ()=>{
+      try{
+        await deleteInvestment(i.id)
+        renderInvestimentos()
+        updateKPIs()
+      }catch(err){}
     })
     el.appendChild(div)
   })
@@ -573,13 +854,21 @@ const pipelineState = {
   editingId: null
 }
 
-function setCustomerStage(customerId, stageId){
+async function setCustomerStage(customerId, stageId){
   const c = db.customers.find(c=>c.id===customerId)
   if(!c) return
   if(!STAGES.some(s=>s.id===stageId)) return
   c.stage = stageId
   c.movedAt = Date.now()
-  saveDB(db)
+  if(storageMode === 'supabase' && supabase){
+    const { error } = await supabase
+      .from('customers')
+      .update({ stage: stageId, moved_at: new Date().toISOString() })
+      .eq('id', customerId)
+    if(error) throw error
+  }else{
+    saveDB(db)
+  }
 }
 
 function renderKanban(){
@@ -616,13 +905,18 @@ function renderKanban(){
     body.addEventListener('dragleave', ()=>{
       body.classList.remove('over')
     })
-    body.addEventListener('drop', e=>{
+    body.addEventListener('drop', async e=>{
       e.preventDefault()
       body.classList.remove('over')
       const id = e.dataTransfer.getData('text/plain')
       if(!id) return
-      setCustomerStage(id, stage.id)
-      refreshAll({kanbanOnly:true})
+      setError('#pipeline-error', '')
+      try{
+        await setCustomerStage(id, stage.id)
+        refreshAll({kanbanOnly:true})
+      }catch(err){
+        setError('#pipeline-error', err?.message || 'Erro ao mover cliente.')
+      }
     })
 
     list.forEach(c=>{
@@ -682,17 +976,20 @@ function renderLeadCard(customer){
     cancelBtn.type = 'button'
     cancelBtn.textContent = 'Cancelar'
 
-    saveBtn.addEventListener('click', ()=>{
+    saveBtn.addEventListener('click', async ()=>{
       const v = validateFullName(nameInput.value)
       if(!v.ok){
         setError('#pipeline-error', v.message)
         return
       }
-      customer.name = v.value
-      pipelineState.editingId = null
-      saveDB(db)
       setError('#pipeline-error', '')
-      refreshAll({kanbanOnly:true})
+      try{
+        await updateCustomerName(customer.id, v.value)
+        pipelineState.editingId = null
+        refreshAll({kanbanOnly:true})
+      }catch(err){
+        setError('#pipeline-error', err?.message || 'Erro ao atualizar cliente.')
+      }
     })
     cancelBtn.addEventListener('click', ()=>{
       pipelineState.editingId = null
@@ -724,9 +1021,14 @@ function renderLeadCard(customer){
   mover.className = 'select-sm'
   mover.setAttribute('aria-label', 'Mover cliente para etapa')
   mover.innerHTML = STAGES.map(s=>`<option value="${s.id}" ${s.id===customer.stage?'selected':''}>${s.label}</option>`).join('')
-  mover.addEventListener('change', ()=>{
-    setCustomerStage(customer.id, mover.value)
-    refreshAll({kanbanOnly:true})
+  mover.addEventListener('change', async ()=>{
+    setError('#pipeline-error', '')
+    try{
+      await setCustomerStage(customer.id, mover.value)
+      refreshAll({kanbanOnly:true})
+    }catch(err){
+      setError('#pipeline-error', err?.message || 'Erro ao mover cliente.')
+    }
   })
 
   const editBtn = document.createElement('button')
@@ -743,13 +1045,16 @@ function renderLeadCard(customer){
   delBtn.className = 'btn danger'
   delBtn.type = 'button'
   delBtn.textContent = 'Remover'
-  delBtn.addEventListener('click', ()=>{
+  delBtn.addEventListener('click', async ()=>{
     const ok = confirm('Remover este cliente?')
     if(!ok) return
-    db.sales = db.sales.filter(s=>s.customerId!==customer.id)
-    db.customers = db.customers.filter(c=>c.id!==customer.id)
-    saveDB(db)
-    refreshAll()
+    setError('#pipeline-error', '')
+    try{
+      await deleteCustomerAndSales(customer.id)
+      refreshAll()
+    }catch(err){
+      setError('#pipeline-error', err?.message || 'Erro ao remover cliente.')
+    }
   })
 
   actions.appendChild(mover)
@@ -791,7 +1096,7 @@ qsa('[data-clientes-tab]').forEach(btn=>{
   })
 })
 
-qs('#form-cliente').addEventListener('submit', e=>{
+qs('#form-cliente').addEventListener('submit', async e=>{
   e.preventDefault()
   setError('#cliente-error', '')
   const nameRaw = qs('#cliente-nome').value
@@ -812,9 +1117,13 @@ qs('#form-cliente').addEventListener('submit', e=>{
     return
   }
 
-  upsertCustomer({ name: v.value, phone, source, profileUrl, notes, stage: 'novo' })
-  e.target.reset()
-  refreshAll()
+  try{
+    await upsertCustomer({ name: v.value, phone, source, profileUrl, notes, stage: 'novo' })
+    e.target.reset()
+    refreshAll()
+  }catch(err){
+    setError('#cliente-error', err?.message || 'Erro ao guardar cliente.')
+  }
 })
 
 qs('#cliente-limpar').addEventListener('click', ()=>{
@@ -822,19 +1131,21 @@ qs('#cliente-limpar').addEventListener('click', ()=>{
   setError('#cliente-error', '')
 })
 
-qs('#form-venda').addEventListener('submit', e=>{
+qs('#form-venda').addEventListener('submit', async e=>{
   e.preventDefault()
   setError('#venda-error', '')
   const customerNameRaw = qs('#venda-cliente-nome').value
   const sellerId = qs('#venda-socio').value
   const quickPhone = qs('#venda-quick-telemovel').value.trim()
-  const occurredAt = qs('#venda-data').value || new Date().toISOString()
-  const amount = Number(qs('#venda-valor').value||0)
+  const occurredOn = qs('#venda-data').value
+  const occurredAt = occurredOn ? dateFromYMD(occurredOn).toISOString() : new Date().toISOString()
+  const amountRaw = qs('#venda-valor').value
+  const amount = amountRaw==='' ? 0 : Number(amountRaw)
   const paymentMethod = qs('#venda-metodo').value.trim()
   const notes = qs('#venda-notas').value.trim()
 
-  if(amount<=0){
-    setError('#venda-error', 'Valor da venda deve ser maior que 0.')
+  if(Number.isNaN(amount) || amount < 0){
+    setError('#venda-error', 'Valor da venda inválido.')
     return
   }
   if(!SELLERS.some(s=>s.id===sellerId)){
@@ -850,25 +1161,28 @@ qs('#form-venda').addEventListener('submit', e=>{
 
   const customerName = v.value
   const existing = db.customers.find(c => String(c.name||'').trim().toLowerCase() === customerName.toLowerCase())
-  const customerId = existing ? existing.id : upsertCustomer({ name: customerName, phone: quickPhone, stage: 'novo' }).id
-
-  addSale({ customerId, quickCustomer: null, occurredAt, amount, sellerId, paymentMethod, notes })
-  e.target.reset()
-  qs('#venda-cliente-nome').value = ''
-  qs('#venda-data').value = nowISO()
-  populateSociosSelect()
-  refreshAll()
+  try{
+    const customerId = existing ? existing.id : (await upsertCustomer({ name: customerName, phone: quickPhone, stage: 'novo' })).id
+    await addSale({ customerId, quickCustomer: null, occurredAt, amount, sellerId, paymentMethod, notes })
+    e.target.reset()
+    qs('#venda-cliente-nome').value = ''
+    qs('#venda-data').value = todayISO()
+    populateSociosSelect()
+    refreshAll()
+  }catch(err){
+    setError('#venda-error', err?.message || 'Erro ao guardar venda.')
+  }
 })
 
 qs('#venda-limpar').addEventListener('click', ()=>{
   qs('#form-venda').reset()
   qs('#venda-cliente-nome').value = ''
-  qs('#venda-data').value = nowISO()
+  qs('#venda-data').value = todayISO()
   populateSociosSelect()
   setError('#venda-error', '')
 })
 
-qs('#form-invest').addEventListener('submit', e=>{
+qs('#form-invest').addEventListener('submit', async e=>{
   e.preventDefault()
   setError('#invest-error', '')
   const platform = qs('#invest-plataforma').value
@@ -882,10 +1196,14 @@ qs('#form-invest').addEventListener('submit', e=>{
     return
   }
 
-  addInvestment({ platform, campaign, occurredOn, amount, notes })
-  e.target.reset()
-  qs('#invest-data').value = todayISO()
-  refreshAll()
+  try{
+    await addInvestment({ platform, campaign, occurredOn, amount, notes })
+    e.target.reset()
+    qs('#invest-data').value = todayISO()
+    refreshAll()
+  }catch(err){
+    setError('#invest-error', err?.message || 'Erro ao guardar investimento.')
+  }
 })
 
 qs('#invest-limpar').addEventListener('click', ()=>{
@@ -906,7 +1224,7 @@ qs('#pipeline-search').addEventListener('input', e=>{
   renderKanban()
 })
 
-qs('#pipeline-add-btn').addEventListener('click', ()=>{
+qs('#pipeline-add-btn').addEventListener('click', async ()=>{
   setError('#pipeline-error', '')
   const raw = qs('#pipeline-add-name').value
   const v = validateFullName(raw)
@@ -914,16 +1232,33 @@ qs('#pipeline-add-btn').addEventListener('click', ()=>{
     setError('#pipeline-error', v.message)
     return
   }
-  upsertCustomer({ name: v.value, phone: '', stage: 'novo' })
-  qs('#pipeline-add-name').value = ''
-  refreshAll()
+  try{
+    await upsertCustomer({ name: v.value, phone: '', stage: 'novo' })
+    qs('#pipeline-add-name').value = ''
+    refreshAll()
+  }catch(err){
+    setError('#pipeline-error', err?.message || 'Erro ao adicionar cliente.')
+  }
 })
 
-qs('#pipeline-reset').addEventListener('click', ()=>{
-  db.customers.forEach(c=>{ c.stage='novo'; c.movedAt=null })
-  saveDB(db)
-  STAGES.forEach(s=> pipelineState.limitByStage[s.id] = 40)
-  refreshAll()
+qs('#pipeline-reset').addEventListener('click', async ()=>{
+  setError('#pipeline-error', '')
+  try{
+    db.customers.forEach(c=>{ c.stage='novo'; c.movedAt=null })
+    if(storageMode === 'supabase' && supabase){
+      const { error } = await supabase
+        .from('customers')
+        .update({ stage: 'novo', moved_at: null })
+        .neq('id', '00000000-0000-0000-0000-000000000000')
+      if(error) throw error
+    }else{
+      saveDB(db)
+    }
+    STAGES.forEach(s=> pipelineState.limitByStage[s.id] = 40)
+    refreshAll()
+  }catch(err){
+    setError('#pipeline-error', err?.message || 'Erro ao redefinir funil.')
+  }
 })
 
 qs('#periodo-select').addEventListener('change', e=>{
@@ -1060,7 +1395,7 @@ qs('#importar').addEventListener('change', async e=>{
   if(!file) return
   const text = await file.text()
   const [, ...rows] = text.split(/\r?\n/).filter(Boolean)
-  rows.forEach(r=>{
+  for(const r of rows){
     const cols = r.split(',')
     const type = cols[0]
     const date = cols[1]
@@ -1071,16 +1406,16 @@ qs('#importar').addEventListener('change', async e=>{
     const sellerRaw = cols.length >= 8 ? cols[6] : ''
     const notes = cols.length >= 8 ? cols[7] : cols[6]
     if(type==='sale'){
-      const c = upsertCustomer({ name: customer||'Sem nome', phone: phone||'' })
+      const c = await upsertCustomer({ name: customer||'Sem nome', phone: phone||'' })
       const sellerId =
         SELLERS.find(s=>s.id===String(sellerRaw||'').toLowerCase())?.id ||
         SELLERS.find(s=>s.label.toLowerCase()===String(sellerRaw||'').toLowerCase())?.id ||
         (SELLERS[0]?.id || 'jusepp')
-      addSale({ customerId: c.id, occurredAt: date, amount: Number(amount||0), sellerId, paymentMethod: '', notes })
+      await addSale({ customerId: c.id, occurredAt: date, amount: Number(amount||0), sellerId, paymentMethod: '', notes })
     }else if(type==='investment'){
-      addInvestment({ platform:'FACEBOOK', campaign, occurredOn: date, amount: Number(amount||0), notes })
+      await addInvestment({ platform:'FACEBOOK', campaign, occurredOn: date, amount: Number(amount||0), notes })
     }
-  })
+  }
   refreshAll()
   e.target.value = ''
 })
@@ -1092,6 +1427,62 @@ qs('#hist-to').addEventListener('change', renderHistory)
 
 function boot(){
   ;(async ()=>{
+    await initStorage()
+
+    if(storageMode === 'supabase_required'){
+      setLocked(true)
+      setError('#login-error', 'Supabase não está configurado neste link. No Railway, adicione CF_SUPABASE_URL, CF_SUPABASE_ANON_KEY, CF_LOGIN_EMAIL (e CF_LOGIN_ALIAS) e faça Redeploy. Depois confirme se /supabase-config.js abre no navegador.')
+      const btn = qs('#login-submit')
+      if(btn) btn.disabled = true
+      return
+    }
+
+    if(storageMode === 'supabase'){
+      const loginInput = qs('#login-user')
+      if(loginInput && supabaseCfg?.loginAlias && !loginInput.value) loginInput.value = supabaseCfg.loginAlias
+
+      const session = await getRemoteSession()
+      const locked = !session
+      setLocked(locked)
+
+      const btn = qs('#login-submit')
+      if(btn) btn.disabled = false
+
+      qs('#login-form')?.addEventListener('submit', async e=>{
+        e.preventDefault()
+        setError('#login-error', '')
+        const user = qs('#login-user')?.value || ''
+        const pass = qs('#login-pass')?.value || ''
+        try{
+          await remoteSignIn(user, pass)
+          await pullRemoteDB()
+          setLocked(false)
+          navTo('dashboard')
+          qs('#venda-data').value = todayISO()
+          qs('#invest-data').value = todayISO()
+          refreshAll()
+          qs('#login-pass').value = ''
+          startRemoteSync()
+        }catch(err){
+          setError('#login-error', formatSupabaseAuthError(err))
+        }
+      })
+
+      if(locked){
+        qs('#login-user')?.focus()
+        return
+      }
+
+      await pullRemoteDB()
+      navTo('dashboard')
+      qs('#venda-data').value = todayISO()
+      qs('#invest-data').value = todayISO()
+      refreshAll()
+      renderKanban()
+      startRemoteSync()
+      return
+    }
+
     await loadAuthConfigScript()
     const cfg = getAuthConfig()
     const locked = !cfg || !isAuthed()
@@ -1126,6 +1517,8 @@ function boot(){
       setAuthed(true)
       setLocked(false)
       navTo('dashboard')
+      qs('#venda-data').value = todayISO()
+      qs('#invest-data').value = todayISO()
       refreshAll()
       qs('#login-pass').value = ''
     })
@@ -1136,7 +1529,7 @@ function boot(){
     }
 
     navTo('dashboard')
-    qs('#venda-data').value = nowISO()
+    qs('#venda-data').value = todayISO()
     qs('#invest-data').value = todayISO()
     refreshAll()
     renderKanban()

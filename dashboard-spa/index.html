@@ -98,12 +98,12 @@
             </div>
             <div class="row">
               <button id="login-submit" class="btn primary" type="submit">Entrar</button>
-              <a class="btn" href="./login-setup.html">Gerar auth-config</a>
+              <a class="btn" href="./SUPABASE_SETUP.md">Setup Supabase</a>
             </div>
           </form>
 
           <div class="auth-help">
-            Se esta for a primeira vez, crie o ficheiro auth-config.js (não deve ir para o Git).
+            Se esta for a primeira vez, crie o utilizador no Supabase Auth e confirme o ficheiro supabase-config.js.
           </div>
         </div>
       </div>
@@ -116,8 +116,8 @@
           <span class="label">Período</span>
           <select id="periodo-select">
             <option value="7">Últimos 7 dias</option>
-            <option value="30" selected>Últimos 30 dias</option>
-            <option value="mes">Mês atual</option>
+            <option value="30">Últimos 30 dias</option>
+            <option value="mes" selected>Mês atual</option>
             <option value="custom">Personalizado…</option>
           </select>
           <input type="date" id="from-date" class="hidden" />
@@ -207,8 +207,8 @@
               </div>
             </details>
             <div class="field">
-              <span class="label">Data/Hora</span>
-              <input id="venda-data" class="input" type="datetime-local" />
+              <span class="label">Data (opcional)</span>
+              <input id="venda-data" class="input" type="date" />
             </div>
             <div class="field">
               <span class="label">Valor (€)</span>
