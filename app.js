@@ -128,6 +128,7 @@ function validateFullName(raw){
 
 const AUTH_KEY = 'cf_auth_v1'
 const SELLER_PREF_KEY = 'cf_seller_pref_v1'
+let sellerSelectedId = ''
 function isAuthed(){
   try{ return sessionStorage.getItem(AUTH_KEY) === '1' }catch{ return false }
 }
@@ -745,21 +746,21 @@ function populateClientesDatalist(){
 function populateSociosSelect(){
   const sel = qs('#venda-socio')
   if(!sel) return
-  const currentOptions = [...sel.options].map(o=>o.value)
-  const desired = SELLERS.map(s=>s.id)
-  const isSame = currentOptions.length === desired.length && desired.every((v,i)=>currentOptions[i]===v)
-  if(!isSame){
-    const current = String(sel.value || '').trim()
+  if(!sel.options.length){
     sel.innerHTML = SELLERS.map(s=>`<option value="${s.id}">${s.label}</option>`).join('')
-    if(current && SELLERS.some(s=>s.id===current)) sel.value = current
+  }
+  if(!sellerSelectedId){
+    const pref = getSellerPref()
+    sellerSelectedId = (pref && SELLERS.some(s=>s.id===pref)) ? pref : (SELLERS[0]?.id || 'jusepp')
   }
   if(!sel.dataset.prefBound){
     sel.dataset.prefBound = '1'
-    sel.addEventListener('change', ()=> setSellerPref(sel.value))
+    sel.addEventListener('change', ()=>{
+      sellerSelectedId = sel.value
+      setSellerPref(sellerSelectedId)
+    })
   }
-  if(document.activeElement === sel) return
-  const pref = getSellerPref()
-  if(pref && SELLERS.some(s=>s.id===pref)) sel.value = pref
+  if(SELLERS.some(s=>s.id===sellerSelectedId)) sel.value = sellerSelectedId
 }
 
 function renderClientes(list=db.customers){
@@ -1091,7 +1092,6 @@ function renderLeadCard(customer){
 function refreshAll(opts={}){
   if(!opts.kanbanOnly){
     populateClientesDatalist()
-    populateSociosSelect()
     renderClientes()
     renderVendas()
     renderInvestimentos()
@@ -1156,6 +1156,7 @@ qs('#form-venda').addEventListener('submit', async e=>{
   e.preventDefault()
   setError('#venda-error', '')
   const customerNameRaw = qs('#venda-cliente-nome').value
+  populateSociosSelect()
   const sellerId = qs('#venda-socio').value
   const quickPhone = qs('#venda-quick-telemovel').value.trim()
   const occurredOn = qs('#venda-data').value
