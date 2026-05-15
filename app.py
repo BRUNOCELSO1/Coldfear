@@ -4,6 +4,14 @@ from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from functools import partial
 
 
+class NoCacheHandler(SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().end_headers()
+
+
 def write_supabase_config(root_dir: Path):
     url = os.environ.get("CF_SUPABASE_URL", "").strip()
     anon_key = os.environ.get("CF_SUPABASE_ANON_KEY", "").strip()
@@ -35,7 +43,7 @@ def main():
     write_supabase_config(root_dir)
 
     port = int(os.environ.get("PORT", "8080"))
-    handler = partial(SimpleHTTPRequestHandler, directory=str(root_dir))
+    handler = partial(NoCacheHandler, directory=str(root_dir))
     httpd = ThreadingHTTPServer(("0.0.0.0", port), handler)
     httpd.serve_forever()
 
