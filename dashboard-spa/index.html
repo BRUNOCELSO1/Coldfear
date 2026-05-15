@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — Vendas & Investimentos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300..800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-bg">
+    <div class="app-shell" role="application" aria-label="Dashboard de Vendas e Investimentos">
+      <aside class="sidebar">
+        <div class="sidebar-top">
+          <div class="brand">
+            <span class="brand-badge" aria-hidden="true"></span>
+            <div>
+              <div class="brand-title">Vision UI</div>
+              <div class="brand-subtitle">ColdFear</div>
+            </div>
+          </div>
+        </div>
+
+        <nav class="side-nav" aria-label="Navegação principal">
+          <button data-view="dashboard" class="nav-btn active" aria-current="page">
+            <span class="nav-ico" aria-hidden="true"></span>
+            <span>Dashboard</span>
+          </button>
+          <button data-view="vendas" class="nav-btn">
+            <span class="nav-ico" aria-hidden="true"></span>
+            <span>Vendas</span>
+          </button>
+          <button data-view="investir" class="nav-btn">
+            <span class="nav-ico" aria-hidden="true"></span>
+            <span>Investir</span>
+          </button>
+          <button data-view="historico" class="nav-btn">
+            <span class="nav-ico" aria-hidden="true"></span>
+            <span>Histórico</span>
+          </button>
+          <button data-view="clientes" class="nav-btn">
+            <span class="nav-ico" aria-hidden="true"></span>
+            <span>Clientes</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-card" role="region" aria-label="Atalho">
+          <div class="sidebar-card-title">Atalho rápido</div>
+          <div class="sidebar-card-text">Criar venda e acompanhar o funil dos clientes.</div>
+          <button id="shortcut-venda" class="btn primary" type="button">+ Nova venda</button>
+        </div>
+      </aside>
+
+      <div class="main">
+        <header class="main-top">
+          <div class="crumbs" aria-label="Breadcrumb">
+            <span class="crumb-muted">Páginas</span>
+            <span class="crumb-sep">/</span>
+            <span id="crumb-current">Dashboard</span>
+          </div>
+          <div class="main-top-row">
+            <h1 id="page-title" class="main-title">Dashboard</h1>
+            <div class="main-actions">
+              <div class="search">
+                <span class="search-ico" aria-hidden="true"></span>
+                <input id="global-search" class="search-input" type="search" placeholder="Pesquisar..." autocomplete="off" />
+              </div>
+              <button id="btn-refresh" class="icon-btn" type="button" aria-label="Atualizar">Atualizar</button>
+            </div>
+          </div>
+        </header>
+
+        <main class="container">
+    <!-- LOGIN -->
+    <section id="view-login" class="view">
+      <div class="auth">
+        <div class="auth-card">
+          <div class="auth-brand">
+            <span class="brand-badge" aria-hidden="true"></span>
+            <div>
+              <div class="auth-title">ColdFear</div>
+              <div class="auth-subtitle">Acesso ao sistema</div>
+            </div>
+          </div>
+
+          <div id="login-error" class="error hidden" role="alert" aria-live="polite"></div>
+
+          <form id="login-form" class="form">
+            <div class="field">
+              <span class="label">Login</span>
+              <input id="login-user" class="input" type="text" autocomplete="username" />
+            </div>
+            <div class="field">
+              <span class="label">Senha</span>
+              <input id="login-pass" class="input" type="password" autocomplete="current-password" />
+            </div>
+            <div class="row">
+              <button id="login-submit" class="btn primary" type="submit">Entrar</button>
+              <a class="btn" href="./login-setup.html">Gerar auth-config</a>
+            </div>
+          </form>
+
+          <div class="auth-help">
+            Se esta for a primeira vez, crie o ficheiro auth-config.js (não deve ir para o Git).
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DASHBOARD -->
+    <section id="view-dashboard" class="view visible">
+      <div class="toolbar">
+        <div class="group" aria-label="Filtro de período">
+          <span class="label">Período</span>
+          <select id="periodo-select">
+            <option value="7">Últimos 7 dias</option>
+            <option value="30" selected>Últimos 30 dias</option>
+            <option value="mes">Mês atual</option>
+            <option value="custom">Personalizado…</option>
+          </select>
+          <input type="date" id="from-date" class="hidden" />
+          <input type="date" id="to-date" class="hidden" />
+          <button id="aplicar-periodo" class="btn">Aplicar</button>
+        </div>
+        <div class="group">
+          <button id="nova-venda-fast" class="btn primary">+ Nova venda</button>
+          <button id="novo-invest-fast" class="btn">+ Novo investimento</button>
+        </div>
+      </div>
+
+      <div class="grid" aria-label="Indicadores">
+        <div class="kpi">
+          <p class="kpi-title">Total vendido</p>
+          <p class="kpi-value" id="kpi-total-vendido">—</p>
+          <div class="kpi-meta">Receita no período selecionado</div>
+        </div>
+        <div class="kpi">
+          <p class="kpi-title">Nº de vendas</p>
+          <p class="kpi-value" id="kpi-num-vendas">—</p>
+          <div class="kpi-meta">Quantidade de transações de venda</div>
+        </div>
+        <div class="kpi">
+          <p class="kpi-title">Ticket médio</p>
+          <p class="kpi-value" id="kpi-ticket-medio">—</p>
+          <div class="kpi-meta">Média por venda (no período)</div>
+        </div>
+        <div class="kpi">
+          <p class="kpi-title">Total investido</p>
+          <p class="kpi-value" id="kpi-total-investido">—</p>
+          <div class="kpi-meta">Gasto em anúncios/marketing</div>
+        </div>
+        <div class="kpi">
+          <p class="kpi-title">ROI</p>
+          <p class="kpi-value" id="kpi-roi">—</p>
+          <div class="kpi-meta">Retorno sobre investimento</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h3 class="panel-title">Evolução das Vendas</h3>
+            <p class="panel-subtitle">Últimos 30 dias</p>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="salesChart"></canvas>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h3 class="panel-title">Transações Recentes</h3>
+            <p class="panel-subtitle">Vendas e investimentos mais recentes</p>
+          </div>
+        </div>
+        <div id="recent-list" class="list"></div>
+      </div>
+    </section>
+
+    <!-- VENDAS -->
+    <section id="view-vendas" class="view">
+      <div class="layout-split">
+        <div class="card">
+          <h3>Nova venda</h3>
+          <div id="venda-error" class="error hidden" role="alert" aria-live="polite"></div>
+          <form id="form-venda" class="form">
+            <div class="field">
+              <span class="label">Cliente</span>
+              <input id="venda-cliente-nome" class="input" type="text" list="clientes-datalist" placeholder="Escreva o nome do cliente…" autocomplete="off" />
+              <datalist id="clientes-datalist"></datalist>
+              <span class="help">Escreva para criar ou selecione uma sugestão para usar um cliente já existente.</span>
+            </div>
+            <div class="field">
+              <span class="label">Sócio (quem fez a venda)</span>
+              <select id="venda-socio"></select>
+              <span class="help">Obrigatório para atribuição por vendedor.</span>
+            </div>
+            <details>
+              <summary class="help">Dados adicionais do cliente (opcional)</summary>
+              <div class="field">
+                <span class="label">Telemóvel</span>
+                <input id="venda-quick-telemovel" class="input" type="tel" />
+              </div>
+            </details>
+            <div class="field">
+              <span class="label">Data/Hora</span>
+              <input id="venda-data" class="input" type="datetime-local" />
+            </div>
+            <div class="field">
+              <span class="label">Valor (€)</span>
+              <input id="venda-valor" class="input" type="number" step="0.01" inputmode="decimal" />
+            </div>
+            <div class="field">
+              <span class="label">Método de Pagamento</span>
+              <input id="venda-metodo" class="input" type="text" placeholder="MBWay, dinheiro, cartão…" />
+            </div>
+            <div class="field">
+              <span class="label">Notas</span>
+              <textarea id="venda-notas" placeholder="Detalhes relevantes…"></textarea>
+            </div>
+            <div class="row">
+              <button class="btn primary" type="submit">Guardar</button>
+              <button class="btn ghost" type="button" id="venda-limpar">Limpar</button>
+            </div>
+          </form>
+        </div>
+        <div class="card">
+          <div class="panel-head">
+            <div>
+              <h3 class="panel-title">Vendas recentes</h3>
+              <p class="panel-subtitle">Últimas 20</p>
+            </div>
+          </div>
+          <div id="vendas-list" class="list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- INVESTIR -->
+    <section id="view-investir" class="view">
+      <div class="layout-split">
+        <div class="card">
+          <h3>Novo investimento</h3>
+          <div id="invest-error" class="error hidden" role="alert" aria-live="polite"></div>
+          <form id="form-invest" class="form">
+            <div class="field">
+              <span class="label">Plataforma</span>
+              <select id="invest-plataforma">
+                <option value="FACEBOOK" selected>Facebook</option>
+                <option value="OUTRA">Outra</option>
+              </select>
+            </div>
+            <div class="field">
+              <span class="label">Campanha</span>
+              <input id="invest-campanha" class="input" type="text" placeholder="Ex.: Campanha Maio" />
+            </div>
+            <div class="field">
+              <span class="label">Data</span>
+              <input id="invest-data" class="input" type="date" />
+            </div>
+            <div class="field">
+              <span class="label">Montante (€)</span>
+              <input id="invest-valor" class="input" type="number" step="0.01" inputmode="decimal" />
+            </div>
+            <div class="field">
+              <span class="label">Notas</span>
+              <textarea id="invest-notas" placeholder="Objetivo, segmentação, etc."></textarea>
+            </div>
+            <div class="row">
+              <button class="btn primary" type="submit">Guardar</button>
+              <button class="btn ghost" type="button" id="invest-limpar">Limpar</button>
+            </div>
+          </form>
+        </div>
+        <div class="card">
+          <div class="panel-head">
+            <div>
+              <h3 class="panel-title">Investimentos recentes</h3>
+              <p class="panel-subtitle">Últimos 20</p>
+            </div>
+          </div>
+          <div id="invest-list" class="list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HISTÓRICO -->
+    <section id="view-historico" class="view">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h3 class="panel-title">Transações</h3>
+            <p class="panel-subtitle">Vendas e investimentos</p>
+          </div>
+          <div class="row">
+            <select id="hist-tipo">
+              <option value="all" selected>Todos</option>
+              <option value="sale">Vendas</option>
+              <option value="investment">Investimentos</option>
+            </select>
+            <input type="date" id="hist-from" />
+            <input type="date" id="hist-to" />
+            <button id="hist-filtrar" class="btn">Filtrar</button>
+            <button id="exportar" class="btn">Exportar CSV</button>
+            <label class="btn file-btn">
+              Importar CSV
+              <input id="importar" type="file" accept=".csv" hidden />
+            </label>
+          </div>
+        </div>
+        <div id="hist-list" class="list"></div>
+      </div>
+    </section>
+
+    <!-- CLIENTES -->
+    <section id="view-clientes" class="view">
+      <div class="tabs" role="tablist" aria-label="Secções de clientes">
+          <button class="tab active" data-clientes-tab="lista" role="tab" aria-selected="true">Lista</button>
+          <button class="tab" data-clientes-tab="etapas" role="tab" aria-selected="false">Etapas</button>
+      </div>
+
+      <div id="clientes-tab-lista" class="clientes-tab">
+        <div class="layout-split">
+          <div class="card">
+            <h3>Novo cliente</h3>
+            <div id="cliente-error" class="error hidden" role="alert" aria-live="polite"></div>
+            <form id="form-cliente" class="form">
+              <div class="field">
+                <span class="label">Nome completo</span>
+                <input id="cliente-nome" class="input" type="text" required />
+              </div>
+              <div class="field">
+                <span class="label">Telemóvel</span>
+                <input id="cliente-telemovel" class="input" type="tel" placeholder="Opcional" />
+                <span class="help">Se preencher, o nº precisa ser único.</span>
+              </div>
+              <div class="field">
+                <span class="label">Origem</span>
+                <input id="cliente-origem" class="input" type="text" placeholder="Facebook" />
+              </div>
+              <div class="field">
+                <span class="label">Perfil (link)</span>
+                <input id="cliente-perfil" class="input" type="url" placeholder="https://…" />
+              </div>
+              <div class="field">
+                <span class="label">Notas</span>
+                <textarea id="cliente-notas" placeholder="Preferências, contexto, etc."></textarea>
+              </div>
+              <div class="row">
+                <button class="btn primary" type="submit">Guardar</button>
+                <button class="btn ghost" type="button" id="cliente-limpar">Limpar</button>
+              </div>
+            </form>
+          </div>
+          <div class="card">
+            <div class="panel-head">
+              <div>
+                <h3 class="panel-title">Lista de clientes</h3>
+                <p class="panel-subtitle">Pesquisa por nome ou telemóvel</p>
+              </div>
+              <div class="row">
+                <input id="cliente-search" class="input" placeholder="Pesquisar…" />
+              </div>
+            </div>
+            <div id="clientes-list" class="list"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="clientes-tab-etapas" class="clientes-tab hidden">
+        <div class="card">
+          <div class="panel-head">
+            <div>
+              <h3 class="panel-title">Etapas do Cliente</h3>
+              <p class="panel-subtitle">Arraste clientes entre colunas (ou use o seletor “Mover”).</p>
+            </div>
+            <div class="row">
+              <input id="pipeline-search" class="input" placeholder="Buscar cliente…" />
+              <button id="pipeline-reset" class="btn">Repor etapas</button>
+            </div>
+          </div>
+
+          <div class="row" style="margin-bottom: 12px;">
+            <div class="field" style="min-width: 280px;">
+              <span class="label">Adicionar cliente (nome completo)</span>
+              <input id="pipeline-add-name" class="input" type="text" placeholder="Ex.: João Manuel Silva" />
+            </div>
+            <button id="pipeline-add-btn" class="btn primary" type="button">Adicionar</button>
+          </div>
+          <div id="pipeline-error" class="error hidden" role="alert" aria-live="polite"></div>
+
+          <div id="kanban" class="kanban" aria-label="Kanban de etapas"></div>
+        </div>
+      </div>
+    </section>
+        </main>
+
+        <footer class="footer">
+          <span>Feito para gestão rápida e clara · PT‑PT · EUR</span>
+        </footer>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

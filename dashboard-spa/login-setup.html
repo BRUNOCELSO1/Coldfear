@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gerar hash — Login</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; margin:0; padding:24px; background:#0b1020; color:#eef2ff}
+    .card{max-width:720px; margin:0 auto; padding:18px; border-radius:14px; border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.04)}
+    label{display:block; font-size:12px; opacity:.8; margin:10px 0 6px}
+    input,textarea{width:100%; padding:10px 12px; border-radius:12px; border:1px solid rgba(255,255,255,.12); background:rgba(0,0,0,.25); color:#eef2ff}
+    textarea{min-height:100px; resize:vertical; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
+    button{margin-top:12px; padding:10px 12px; border-radius:999px; border:0; background:#2d7dff; color:#071017; font-weight:700; cursor:pointer}
+    .muted{font-size:12px; opacity:.75; line-height:1.4}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1 style="margin:0 0 6px; font-size:18px;">Gerar hash SHA‑256 (para auth-config.js)</h1>
+    <p class="muted">Cole aqui o login e a senha. O ficheiro gerado não deve ser commitado. Coloque auth-config.js em .gitignore.</p>
+
+    <label>Login</label>
+    <input id="u" type="text" />
+
+    <label>Senha</label>
+    <input id="p" type="password" />
+
+    <button id="gen" type="button">Gerar</button>
+
+    <label>Conteúdo para dashboard-spa/auth-config.js</label>
+    <textarea id="out" readonly></textarea>
+  </div>
+
+  <script>
+    async function sha256Hex(text){
+      const enc = new TextEncoder();
+      const digest = await crypto.subtle.digest('SHA-256', enc.encode(String(text||'')));
+      return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    }
+    document.getElementById('gen').addEventListener('click', async ()=>{
+      const login = document.getElementById('u').value.trim();
+      const pass = document.getElementById('p').value;
+      const h = await sha256Hex(pass);
+      document.getElementById('out').value = `window.CF_AUTH = {\n  login: "${login.replaceAll('"','\\"')}",\n  passwordSha256: "${h}"\n};\n`;
+    });
+  </script>
+</body>
+</html>
+
