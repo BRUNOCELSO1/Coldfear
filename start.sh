@@ -16,4 +16,14 @@ EOF
 fi
 
 PORT="${PORT:-8080}"
-exec python3 -m http.server "${PORT}" --bind 0.0.0.0 --directory "${ROOT_DIR}"
+PY_BIN=""
+if command -v python3 >/dev/null 2>&1; then
+  PY_BIN="python3"
+elif command -v python >/dev/null 2>&1; then
+  PY_BIN="python"
+else
+  echo "python not found" >&2
+  exit 1
+fi
+
+exec "${PY_BIN}" -m http.server "${PORT}" --bind 0.0.0.0 --directory "${ROOT_DIR}"
