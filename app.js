@@ -383,7 +383,7 @@ function openSaleEditModal(saleId){
     setError(errEl, '')
     const phone = qs('#edit-customer-phone')?.value?.trim() || ''
     const date = qs('#edit-sale-date')?.value || ''
-    const occurredAt = date ? dateFromYMD(date).toISOString() : s.occurredAt
+    const occurredAt = date ? occurredAtFromDateInput(date) : s.occurredAt
     const amountRaw = qs('#edit-sale-amount')?.value ?? ''
     const amount = amountRaw==='' ? 0 : Number(amountRaw)
     const sellerId = qs('#edit-sale-seller')?.value || s.sellerId
@@ -663,6 +663,12 @@ function dayKeyFromYMD(ymd){
 }
 function todayISO(){ return new Date().toISOString().slice(0,10) }
 function nowISO(){ const d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16) }
+function occurredAtFromDateInput(ymd){
+  const day = String(ymd || '').trim()
+  if(!day) return new Date().toISOString()
+  if(day === todayISO()) return new Date().toISOString()
+  return dateFromYMD(day).toISOString()
+}
 
 let currentView = 'dashboard'
 function setHeader(view){
@@ -1577,7 +1583,7 @@ qs('#form-venda').addEventListener('submit', async e=>{
   const sellerId = qs('#venda-socio').value
   const quickPhone = qs('#venda-quick-telemovel').value.trim()
   const occurredOn = qs('#venda-data').value
-  const occurredAt = occurredOn ? dateFromYMD(occurredOn).toISOString() : new Date().toISOString()
+  const occurredAt = occurredAtFromDateInput(occurredOn)
   const amountRaw = qs('#venda-valor').value
   const amount = amountRaw==='' ? 0 : Number(amountRaw)
   const paymentMethod = qs('#venda-metodo').value.trim()
