@@ -320,7 +320,16 @@ async function initStorage(){
   if(cfg){
     storageMode = 'supabase'
     supabaseCfg = cfg
-    supabase = createClient(cfg.url, cfg.anonKey)
+    let storage = undefined
+    try{ storage = window.localStorage }catch{}
+    supabase = createClient(cfg.url, cfg.anonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storage
+      }
+    })
   }else{
     const host = String(window.location?.hostname || '').toLowerCase()
     const isDevHost = host === 'localhost' || host === '127.0.0.1' || host === '::1'
