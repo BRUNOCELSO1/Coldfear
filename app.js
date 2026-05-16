@@ -126,6 +126,118 @@ function validateFullName(raw){
   return { ok: true, value: name }
 }
 
+function escapeHtml(raw){
+  return String(raw ?? '').replace(/[&<>"']/g, c=>({
+    '&':'&amp;',
+    '<':'&lt;',
+    '>':'&gt;',
+    '"':'&quot;',
+    "'":'&#39;'
+  }[c]))
+}
+
+let modalBound = false
+function openModal({ title, subtitle, bodyHtml }){
+  const modal = qs('#cf-modal')
+  if(!modal) return
+  qs('#modal-title').textContent = title || 'Detalhes'
+  qs('#modal-subtitle').textContent = subtitle || ''
+  qs('#modal-body').innerHTML = bodyHtml || ''
+  modal.classList.remove('hidden')
+  if(!modalBound){
+    modalBound = true
+    qs('#modal-close')?.addEventListener('click', closeModal)
+    modal.addEventListener('click', e=>{
+      if(e.target === modal) closeModal()
+    })
+    document.addEventListener('keydown', e=>{
+      if(e.key === 'Escape') closeModal()
+    })
+  }
+}
+function closeModal(){
+  const modal = qs('#cf-modal')
+  if(!modal) return
+  modal.classList.add('hidden')
+  qs('#modal-body').innerHTML = ''
+}
+function openCustomerModal(customerId){
+  const c = db.customers.find(x=>x.id===customerId)
+  if(!c) return
+  const stageLabel = (STAGES.find(s=>s.id===c.stage) || STAGES[0]).label
+  const sales = db.sales
+    .filter(s=>s.customerId===c.id)
+    .slice()
+    .sort((a,b)=> new Date(b.occurredAt)-new Date(a.occurredAt))
+  const total = sales.reduce((a,s)=>a+Number(s.amount||0),0)
+  const subtitle = `${stageLabel} · ${c.phone || '—'}`
+  const profile = c.profileUrl ? `<a href="${escapeHtml(c.profileUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(c.profileUrl)}</a>` : '—'
+  const notes = c.notes ? escapeHtml(c.notes) : '—'
+  const tx = sales.length
+    ? sales.map(s=>{
+        const seller = SELLERS.find(x=>x.id===s.sellerId)?.label || '—'
+        const method = s.paymentMethod || '—'
+        const when = fmtDateTime(s.occurredAt)
+        const sNotes = s.notes ? `<div class="tx-notes">${escapeHtml(s.notes)}</div>` : ''
+        return `
+          <div class="tx">
+            <div class="tx-main">
+              <div class="tx-title">${escapeHtml(c.name)}</div>
+              <div class="tx-sub">
+                <span class="chip">${escapeHtml(seller)}</span>
+                <span class="chip">${escapeHtml(method)}</span>
+                <span>${escapeHtml(when)}</span>
+              </div>
+              ${sNotes}
+            </div>
+            <div class="tx-amount">${escapeHtml(fmtMoney(s.amount))}</div>
+          </div>
+        `
+      }).join('')
+    : `<div class="meta">Sem vendas registradas para este cliente.</div>`
+  openModal({
+    title: c.name,
+    subtitle,
+    bodyHtml: `
+      <div class="detail-grid">
+        <div class="detail-field">
+          <div class="detail-label">Telemóvel</div>
+          <div class="detail-value">${escapeHtml(c.phone || '—')}</div>
+        </div>
+        <div class="detail-field">
+          <div class="detail-label">Origem</div>
+          <div class="detail-value">${escapeHtml(c.source || '—')}</div>
+        </div>
+        <div class="detail-field">
+          <div class="detail-label">Etapa</div>
+          <div class="detail-value">${escapeHtml(stageLabel)}</div>
+        </div>
+        <div class="detail-field" style="grid-column: span 3;">
+          <div class="detail-label">Perfil</div>
+          <div class="detail-value">${profile}</div>
+        </div>
+        <div class="detail-field" style="grid-column: span 3;">
+          <div class="detail-label">Notas</div>
+          <div class="detail-value">${notes}</div>
+        </div>
+      </div>
+
+      <div class="detail-block">
+        <p class="detail-block-title">Resumo</p>
+        <div class="meta">
+          <span>Vendas: <strong>${sales.length}</strong></span>
+          <span>Total: <strong>${escapeHtml(fmtMoney(total))}</strong></span>
+        </div>
+      </div>
+
+      <div class="detail-block">
+        <p class="detail-block-title">Histórico de vendas</p>
+        ${tx}
+      </div>
+    `
+  })
+}
+
 const AUTH_KEY = 'cf_auth_v1'
 const SELLER_PREF_KEY = 'cf_seller_pref_v1'
 let sellerSelectedId = ''
@@ -771,8 +883,11 @@ function renderClientes(list=db.customers){
     .sort((a,b)=> (a.name||'').localeCompare(b.name||''))
     .forEach(c=>{
       const div = document.createElement('div')
-      div.className='item'
+      div.className='item clickable'
       const stageLabel = (STAGES.find(s=>s.id===c.stage) || STAGES[0]).label
+      const csales = db.sales.filter(s=>s.customerId===c.id)
+      const csalesCount = csales.length
+      const csalesTotal = csales.reduce((a,s)=>a+Number(s.amount||0),0)
       div.innerHTML = `
         <div>
           <div><strong>${c.name}</strong></div>
@@ -780,6 +895,8 @@ function renderClientes(list=db.customers){
             <span>${c.phone || '—'}</span>
             <span>${c.source || '—'}</span>
             <span class="chip">${stageLabel}</span>
+            <span class="chip">${csalesCount} vendas</span>
+            <span class="chip">${fmtMoney(csalesTotal)}</span>
           </div>
         </div>
         <div class="row">
@@ -787,6 +904,10 @@ function renderClientes(list=db.customers){
           <button data-del="${c.id}" class="btn danger">Remover</button>
         </div>
       `
+      div.addEventListener('click', e=>{
+        if(e.target.closest('button')) return
+        openCustomerModal(c.id)
+      })
       div.querySelector('[data-del]').addEventListener('click', async ()=>{
         const ok = confirm('Remover cliente e as vendas associadas?')
         if(!ok) return
@@ -981,6 +1102,12 @@ function renderLeadCard(customer){
     card.classList.remove('dragging')
   })
 
+  card.addEventListener('click', e=>{
+    if(card.classList.contains('dragging')) return
+    if(e.target.closest('button, select, input, textarea, a')) return
+    openCustomerModal(customer.id)
+  })
+
   if(pipelineState.editingId === customer.id){
     const nameInput = document.createElement('input')
     nameInput.className = 'input'
@@ -1035,6 +1162,17 @@ function renderLeadCard(customer){
   const phone = document.createElement('span')
   phone.textContent = customer.phone || '—'
   meta.appendChild(phone)
+  const csales = db.sales.filter(s=>s.customerId===customer.id)
+  const csalesCount = csales.length
+  const csalesTotal = csales.reduce((a,s)=>a+Number(s.amount||0),0)
+  const chipCount = document.createElement('span')
+  chipCount.className = 'chip'
+  chipCount.textContent = `${csalesCount} vendas`
+  const chipTotal = document.createElement('span')
+  chipTotal.className = 'chip'
+  chipTotal.textContent = fmtMoney(csalesTotal)
+  meta.appendChild(chipCount)
+  meta.appendChild(chipTotal)
 
   const actions = document.createElement('div')
   actions.className = 'lead-actions'
@@ -1367,13 +1505,27 @@ function renderHistory(){
       if(x.type==='sale'){
         const c = db.customers.find(c=>c.id===x.sale.customerId)
         const seller = SELLERS.find(s=>s.id===x.sale.sellerId)?.label || '—'
+        if(c) div.classList.add('clickable')
         div.innerHTML = `
           <div>
             <div><strong>Venda</strong> <span class="chip">${fmtMoney(x.sale.amount)}</span> <span class="chip">${seller}</span></div>
-            <div class="meta"><span>${c?c.name:'Cliente'}</span><span>${fmtDateTime(x.sale.occurredAt)}</span></div>
+            <div class="meta">
+              ${c ? `<button type="button" class="link-btn" data-open-customer="${c.id}">${escapeHtml(c.name)}</button>` : `<span>Cliente</span>`}
+              <span>${fmtDateTime(x.sale.occurredAt)}</span>
+            </div>
           </div>
           <div class="meta"><span class="chip">${x.sale.paymentMethod || '—'}</span></div>
         `
+        if(c){
+          div.addEventListener('click', e=>{
+            if(e.target.closest('button')) return
+            openCustomerModal(c.id)
+          })
+          div.querySelector('[data-open-customer]')?.addEventListener('click', e=>{
+            e.stopPropagation()
+            openCustomerModal(c.id)
+          })
+        }
       }else{
         div.innerHTML = `
           <div>
