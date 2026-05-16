@@ -545,6 +545,11 @@ button{cursor:pointer}
 }
 .card h3{margin:0 0 10px; font-size:15px}
 .form{display:grid; gap:10px}
+.form-grid{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:10px;
+}
 .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
 
 .tabs{
@@ -686,5 +691,6 @@ button{cursor:pointer}
   .kpi{grid-column:span 12}
   .layout-split{grid-template-columns:1fr}
   .kanban{grid-template-columns:repeat(1, minmax(260px, 1fr))}
+  .form-grid{grid-template-columns:1fr}
   .detail-grid{grid-template-columns:1fr}
 }
