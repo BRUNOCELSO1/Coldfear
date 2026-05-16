@@ -1,5 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm'
 
+const APP_BUILD = 'build-20260516-1'
 const PT = new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' })
 const TZ = 'Europe/Lisbon'
 const qs = (s, el=document) => el.querySelector(s)
@@ -102,6 +103,11 @@ function normalizeDB(next){
   return next
 }
 let db = normalizeDB({ customers: [], sales: [], investments: [] })
+
+try{
+  const b = qs('#build-id')
+  if(b) b.textContent = APP_BUILD
+}catch{}
 
 function setHidden(id, hidden){
   const el = qs(id)
