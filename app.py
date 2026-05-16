@@ -96,7 +96,18 @@ class AppHandler(SimpleHTTPRequestHandler):
         pathname = parsed.path or "/"
 
         if pathname == "/health":
-            return self._send_text(200, "ok", "text/plain; charset=utf-8")
+            return self._send_text(
+                200,
+                f"ok build-{self.build_id}",
+                "text/plain; charset=utf-8",
+            )
+
+        if pathname == "/version":
+            return self._send_text(
+                200,
+                f"build-{self.build_id}",
+                "text/plain; charset=utf-8",
+            )
 
         if pathname in ["/", "/index.html"]:
             return self._serve_index()
