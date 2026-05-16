@@ -238,6 +238,178 @@ function openCustomerModal(customerId){
   })
 }
 
+function openSaleModal(saleId){
+  const s = db.sales.find(x=>x.id===saleId)
+  if(!s) return
+  const c = db.customers.find(x=>x.id===s.customerId)
+  const seller = SELLERS.find(x=>x.id===s.sellerId)?.label || '—'
+  const method = s.paymentMethod || '—'
+  const when = fmtDateTime(s.occurredAt)
+  const stageLabel = c ? (STAGES.find(x=>x.id===c.stage) || STAGES[0]).label : '—'
+  const profile = c?.profileUrl ? `<a href="${escapeHtml(c.profileUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(c.profileUrl)}</a>` : '—'
+  const cNotes = c?.notes ? escapeHtml(c.notes) : '—'
+  const sNotes = s.notes ? escapeHtml(s.notes) : '—'
+
+  openModal({
+    title: 'Venda',
+    subtitle: `${when} · ${seller}`,
+    bodyHtml: `
+      <div class="row">
+        <button type="button" class="btn" id="modal-edit-sale">Editar</button>
+        <button type="button" class="btn danger" id="modal-del-sale">Remover</button>
+      </div>
+      <div class="detail-grid">
+        <div class="detail-field">
+          <div class="detail-label">Cliente</div>
+          <div class="detail-value">${c ? `<button type="button" class="link-btn" id="modal-open-customer">${escapeHtml(c.name)}</button>` : '—'}</div>
+        </div>
+        <div class="detail-field">
+          <div class="detail-label">Telemóvel</div>
+          <div class="detail-value">${escapeHtml(c?.phone || '—')}</div>
+        </div>
+        <div class="detail-field">
+          <div class="detail-label">Etapa</div>
+          <div class="detail-value">${escapeHtml(stageLabel)}</div>
+        </div>
+
+        <div class="detail-field">
+          <div class="detail-label">Valor</div>
+          <div class="detail-value">${escapeHtml(fmtMoney(s.amount))}</div>
+        </div>
+        <div class="detail-field">
+          <div class="detail-label">Método</div>
+          <div class="detail-value">${escapeHtml(method)}</div>
+        </div>
+        <div class="detail-field">
+          <div class="detail-label">Sócio</div>
+          <div class="detail-value">${escapeHtml(seller)}</div>
+        </div>
+
+        <div class="detail-field" style="grid-column: span 3;">
+          <div class="detail-label">Perfil</div>
+          <div class="detail-value">${profile}</div>
+        </div>
+        <div class="detail-field" style="grid-column: span 3;">
+          <div class="detail-label">Notas da venda</div>
+          <div class="detail-value">${sNotes}</div>
+        </div>
+        <div class="detail-field" style="grid-column: span 3;">
+          <div class="detail-label">Notas do cliente</div>
+          <div class="detail-value">${cNotes}</div>
+        </div>
+      </div>
+    `
+  })
+
+  if(c){
+    const btn = document.getElementById('modal-open-customer')
+    btn?.addEventListener('click', ()=>{
+      closeModal()
+      openCustomerModal(c.id)
+    })
+  }
+  document.getElementById('modal-edit-sale')?.addEventListener('click', ()=>{
+    openSaleEditModal(saleId)
+  })
+  document.getElementById('modal-del-sale')?.addEventListener('click', async ()=>{
+    const ok = confirm('Remover esta venda?')
+    if(!ok) return
+    try{
+      await deleteSale(saleId)
+      closeModal()
+      refreshAll()
+    }catch(err){}
+  })
+}
+
+function openSaleEditModal(saleId){
+  const s = db.sales.find(x=>x.id===saleId)
+  if(!s) return
+  const c = db.customers.find(x=>x.id===s.customerId)
+  const when = fmtDateTime(s.occurredAt)
+  const ymd = dayKeyFromISO(s.occurredAt)
+  openModal({
+    title: 'Editar venda',
+    subtitle: when,
+    bodyHtml: `
+      <div class="detail-block">
+        <p class="detail-block-title">Dados da venda</p>
+        <div class="form">
+          <div class="field">
+            <span class="label">Cliente</span>
+            <input class="input" value="${escapeHtml(c?.name || '—')}" disabled />
+          </div>
+          <div class="field">
+            <span class="label">Telemóvel</span>
+            <input id="edit-customer-phone" class="input" type="tel" value="${escapeHtml(c?.phone || '')}" placeholder="Opcional" />
+          </div>
+          <div class="form-grid">
+            <div class="field">
+              <span class="label">Data (opcional)</span>
+              <input id="edit-sale-date" class="input" type="date" value="${escapeHtml(ymd)}" />
+            </div>
+            <div class="field">
+              <span class="label">Valor (€)</span>
+              <input id="edit-sale-amount" class="input" type="number" step="0.01" inputmode="decimal" value="${escapeHtml(String(s.amount ?? 0))}" />
+            </div>
+            <div class="field" style="grid-column: span 2;">
+              <span class="label">Sócio</span>
+              <select id="edit-sale-seller" class="input">
+                ${SELLERS.map(x=>`<option value="${x.id}" ${x.id===s.sellerId?'selected':''}>${x.label}</option>`).join('')}
+              </select>
+            </div>
+            <div class="field" style="grid-column: span 2;">
+              <span class="label">Método</span>
+              <input id="edit-sale-method" class="input" type="text" value="${escapeHtml(s.paymentMethod || '')}" placeholder="MBWay, dinheiro, cartão…" />
+            </div>
+          </div>
+          <div class="field">
+            <span class="label">Notas</span>
+            <textarea id="edit-sale-notes" placeholder="Detalhes relevantes…">${escapeHtml(s.notes || '')}</textarea>
+          </div>
+          <div class="row">
+            <button type="button" class="btn primary" id="edit-sale-save">Guardar</button>
+            <button type="button" class="btn" id="edit-sale-cancel">Cancelar</button>
+          </div>
+          <div id="edit-sale-error" class="error hidden" role="alert" aria-live="polite"></div>
+        </div>
+      </div>
+    `
+  })
+
+  document.getElementById('edit-sale-cancel')?.addEventListener('click', ()=> openSaleModal(saleId))
+  document.getElementById('edit-sale-save')?.addEventListener('click', async ()=>{
+    const errEl = '#edit-sale-error'
+    setError(errEl, '')
+    const phone = qs('#edit-customer-phone')?.value?.trim() || ''
+    const date = qs('#edit-sale-date')?.value || ''
+    const occurredAt = date ? dateFromYMD(date).toISOString() : s.occurredAt
+    const amountRaw = qs('#edit-sale-amount')?.value ?? ''
+    const amount = amountRaw==='' ? 0 : Number(amountRaw)
+    const sellerId = qs('#edit-sale-seller')?.value || s.sellerId
+    const paymentMethod = qs('#edit-sale-method')?.value?.trim() || ''
+    const notes = qs('#edit-sale-notes')?.value?.trim() || ''
+    if(Number.isNaN(amount) || amount < 0){
+      setError(errEl, 'Valor inválido.')
+      return
+    }
+    if(!SELLERS.some(x=>x.id===sellerId)){
+      setError(errEl, 'Selecione o sócio.')
+      return
+    }
+    try{
+      if(c && phone !== String(c.phone || '').trim()){
+        await updateCustomerPhone(c.id, phone)
+      }
+      await updateSale(saleId, { occurredAt, amount, sellerId, paymentMethod, notes })
+      refreshAll()
+      openSaleModal(saleId)
+    }catch(err){
+      setError(errEl, err?.message || 'Erro ao atualizar venda.')
+    }
+  })
+}
+
 const AUTH_KEY = 'cf_auth_v1'
 const SELLER_PREF_KEY = 'cf_seller_pref_v1'
 let sellerSelectedId = ''
@@ -327,7 +499,8 @@ async function initStorage(){
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
-        storage
+        storage,
+        storageKey: 'cf_supabase_auth_v1'
       }
     })
   }else{
@@ -357,7 +530,19 @@ function resolveLoginEmail(rawLogin){
 async function getRemoteSession(){
   if(storageMode !== 'supabase' || !supabase) return null
   const { data } = await supabase.auth.getSession()
-  return data?.session || null
+  if(data?.session) return data.session
+  return await new Promise(resolve=>{
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session)=>{
+      if(event === 'INITIAL_SESSION'){
+        sub?.subscription?.unsubscribe()
+        resolve(session || null)
+      }
+    })
+    setTimeout(()=>{
+      sub?.subscription?.unsubscribe()
+      resolve(null)
+    }, 1200)
+  })
 }
 async function remoteSignIn(login, password){
   const email = resolveLoginEmail(login)
@@ -629,6 +814,37 @@ async function addSale({customerId, quickCustomer, occurredAt, amount, sellerId,
     return s
   }
 }
+async function updateSale(saleId, patch){
+  const s = db.sales.find(x=>x.id===saleId)
+  if(!s) return null
+  const next = {
+    occurredAt: patch.occurredAt ?? s.occurredAt,
+    amount: patch.amount ?? s.amount,
+    sellerId: patch.sellerId ?? s.sellerId,
+    paymentMethod: patch.paymentMethod ?? s.paymentMethod,
+    notes: patch.notes ?? s.notes
+  }
+  s.occurredAt = next.occurredAt
+  s.amount = Number(next.amount || 0)
+  s.sellerId = next.sellerId
+  s.paymentMethod = next.paymentMethod
+  s.notes = next.notes
+
+  if(storageMode === 'supabase' && supabase){
+    const row = {
+      occurred_at: s.occurredAt,
+      amount: Number(s.amount || 0),
+      seller_id: SELLERS.some(x=>x.id===s.sellerId) ? s.sellerId : (SELLERS[0]?.id || 'jusepp'),
+      payment_method: s.paymentMethod ? s.paymentMethod : null,
+      notes: s.notes ? s.notes : null
+    }
+    const { error } = await supabase.from('sales').update(row).eq('id', saleId)
+    if(error) throw error
+  }else{
+    saveDB(db)
+  }
+  return s
+}
 async function addInvestment({platform, campaign, occurredOn, amount, notes}){
   if(storageMode === 'supabase' && supabase){
     const row = {
@@ -665,6 +881,23 @@ async function updateCustomerName(customerId, nextName){
   c.name = nextName
   if(storageMode === 'supabase' && supabase){
     const { error } = await supabase.from('customers').update({ name: nextName }).eq('id', customerId)
+    if(error) throw error
+  }else{
+    saveDB(db)
+  }
+}
+async function updateCustomerPhone(customerId, nextPhone){
+  const c = db.customers.find(c=>c.id===customerId)
+  if(!c) return
+  const phone = String(nextPhone || '').trim()
+  const phoneKey = normalizePhone(phone)
+  if(phoneKey){
+    const exists = db.customers.find(x => x.id !== customerId && normalizePhone(x.phone) === phoneKey)
+    if(exists) throw new Error('Já existe um cliente com este nº.')
+  }
+  c.phone = phone
+  if(storageMode === 'supabase' && supabase){
+    const { error } = await supabase.from('customers').update({ phone: phone ? phone : null }).eq('id', customerId)
     if(error) throw error
   }else{
     saveDB(db)
@@ -721,7 +954,15 @@ function readPeriod(){
   const pSel = qs('#periodo-select').value
   let from = null
   let to = null
-  if(pSel==='7') from = new Date(Date.now()-7*86400000)
+  if(pSel==='today'){
+    const d = new Date()
+    from = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    to = new Date(d.getFullYear(), d.getMonth(), d.getDate()+1)
+  }else if(pSel==='yesterday'){
+    const d = new Date()
+    from = new Date(d.getFullYear(), d.getMonth(), d.getDate()-1)
+    to = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  }else if(pSel==='7') from = new Date(Date.now()-7*86400000)
   else if(pSel==='30') from = new Date(Date.now()-30*86400000)
   else if(pSel==='mes'){
     const d = new Date()
@@ -824,13 +1065,26 @@ function renderRecent(m){
       const c = db.customers.find(c=>c.id===it.customerId)
       const s = db.sales.find(x=>x.id===it.id)
       const seller = SELLERS.find(x=>x.id===s?.sellerId)?.label || '—'
+      if(s) div.classList.add('clickable')
       div.innerHTML = `
         <div>
           <div><strong>Venda</strong> <span class="chip">${fmtMoney(it.value)}</span></div>
           <div class="meta"><span>${c?c.name:'Cliente'}</span><span>${fmtDateTime(it.at)}</span><span class="chip">${seller}</span></div>
         </div>
-        <div class="meta"><span class="chip">+ Receita</span></div>
+        <div class="row">
+          <button data-open-sale="${s?.id || ''}" class="btn">Detalhes</button>
+        </div>
       `
+      if(s){
+        div.addEventListener('click', e=>{
+          if(e.target.closest('button')) return
+          openSaleModal(s.id)
+        })
+        div.querySelector('[data-open-sale]')?.addEventListener('click', e=>{
+          e.stopPropagation()
+          openSaleModal(s.id)
+        })
+      }
     }else{
       div.innerHTML = `
         <div>
@@ -956,14 +1210,25 @@ function renderVendas(){
     const c = db.customers.find(c=>c.id===s.customerId)
     const seller = SELLERS.find(x=>x.id===s.sellerId)?.label || '—'
     const div = document.createElement('div')
-    div.className='item'
+    div.className='item clickable'
     div.innerHTML = `
       <div>
         <div><strong>${fmtMoney(s.amount)}</strong> <span class="chip">${seller}</span> <span class="chip">${s.paymentMethod || '—'}</span></div>
         <div class="meta"><span>${c?c.name:'Cliente'}</span><span>${fmtDateTime(s.occurredAt)}</span></div>
       </div>
-      <div class="row"><button data-del="${s.id}" class="btn danger">Remover</button></div>
+      <div class="row">
+        <button data-open="${s.id}" class="btn">Detalhes</button>
+        <button data-del="${s.id}" class="btn danger">Remover</button>
+      </div>
     `
+    div.addEventListener('click', e=>{
+      if(e.target.closest('button')) return
+      openSaleModal(s.id)
+    })
+    div.querySelector('[data-open]')?.addEventListener('click', e=>{
+      e.stopPropagation()
+      openSaleModal(s.id)
+    })
     div.querySelector('[data-del]').addEventListener('click', async ()=>{
       try{
         await deleteSale(s.id)
@@ -1299,8 +1564,13 @@ qs('#cliente-limpar').addEventListener('click', ()=>{
   setError('#cliente-error', '')
 })
 
+let saleSubmitBusy = false
 qs('#form-venda').addEventListener('submit', async e=>{
   e.preventDefault()
+  if(saleSubmitBusy) return
+  saleSubmitBusy = true
+  const submitBtn = e.target.querySelector('button[type="submit"]')
+  if(submitBtn) submitBtn.disabled = true
   setError('#venda-error', '')
   const customerNameRaw = qs('#venda-cliente-nome').value
   populateSociosSelect()
@@ -1340,6 +1610,9 @@ qs('#form-venda').addEventListener('submit', async e=>{
     refreshAll()
   }catch(err){
     setError('#venda-error', err?.message || 'Erro ao guardar venda.')
+  }finally{
+    saleSubmitBusy = false
+    if(submitBtn) submitBtn.disabled = false
   }
 })
 
@@ -1514,7 +1787,7 @@ function renderHistory(){
       if(x.type==='sale'){
         const c = db.customers.find(c=>c.id===x.sale.customerId)
         const seller = SELLERS.find(s=>s.id===x.sale.sellerId)?.label || '—'
-        if(c) div.classList.add('clickable')
+        div.classList.add('clickable')
         div.innerHTML = `
           <div>
             <div><strong>Venda</strong> <span class="chip">${fmtMoney(x.sale.amount)}</span> <span class="chip">${seller}</span></div>
@@ -1523,13 +1796,20 @@ function renderHistory(){
               <span>${fmtDateTime(x.sale.occurredAt)}</span>
             </div>
           </div>
-          <div class="meta"><span class="chip">${x.sale.paymentMethod || '—'}</span></div>
+          <div class="row">
+            <span class="chip">${escapeHtml(x.sale.paymentMethod || '—')}</span>
+            <button data-open-sale="${x.sale.id}" class="btn">Detalhes</button>
+          </div>
         `
+        div.addEventListener('click', e=>{
+          if(e.target.closest('button')) return
+          openSaleModal(x.sale.id)
+        })
+        div.querySelector('[data-open-sale]')?.addEventListener('click', e=>{
+          e.stopPropagation()
+          openSaleModal(x.sale.id)
+        })
         if(c){
-          div.addEventListener('click', e=>{
-            if(e.target.closest('button')) return
-            openCustomerModal(c.id)
-          })
           div.querySelector('[data-open-customer]')?.addEventListener('click', e=>{
             e.stopPropagation()
             openCustomerModal(c.id)
