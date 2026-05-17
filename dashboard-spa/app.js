@@ -601,25 +601,18 @@ function readPeriod(){
   let from = null
   let to = null
   if(pSel==='today'){
-  const d = new Date()
-  from = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  to = new Date(d.getFullYear(), d.getMonth(), d.getDate()+1)
-}else if(pSel==='yesterday'){
-  const d = new Date()
-  from = new Date(d.getFullYear(), d.getMonth(), d.getDate()-1)
-  to = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-}else if(pSel==='7'){
-  from = new Date(Date.now()-7*86400000)
-}else if(pSel==='30'){
-  from = new Date(Date.now()-30*86400000)
-}else if(pSel==='mes'){
-  const d = new Date()
-  from = new Date(d.getFullYear(), d.getMonth(), 1)
-}else{
-  ...
-}if(pSel==='7') from = new Date(Date.now()-7*86400000)
-  else if(pSel==='30') from = new Date(Date.now()-30*86400000)
-  else if(pSel==='mes'){
+    const d = new Date()
+    from = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    to = new Date(d.getFullYear(), d.getMonth(), d.getDate()+1)
+  }else if(pSel==='yesterday'){
+    const d = new Date()
+    from = new Date(d.getFullYear(), d.getMonth(), d.getDate()-1)
+    to = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  }else if(pSel==='7'){
+    from = new Date(Date.now()-7*86400000)
+  }else if(pSel==='30'){
+    from = new Date(Date.now()-30*86400000)
+  }else if(pSel==='mes'){
     const d = new Date()
     from = new Date(d.getFullYear(), d.getMonth(), 1)
   }else{
