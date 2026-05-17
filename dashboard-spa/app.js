@@ -1394,8 +1394,6 @@ function renderAllSales(){
     <div class="tcell">Cliente</div>
     <div class="tcell">Sócio</div>
     <div class="tcell tnum">Valor</div>
-    <div class="tcell">Método</div>
-    <div class="tcell tactions">Ações</div>
   `
   el.appendChild(head)
 
@@ -1408,13 +1406,14 @@ function renderAllSales(){
       <div class="tcell">${fmtDateOnlyFromISO(s.occurredAt)}</div>
       <div class="tcell">
         <div class="tmain">${c ? c.name : 'Cliente'}</div>
-        <div class="tmuted">${c?.phone || '—'}</div>
+        <div class="tmuted">${escapeHtml(c?.phone || '—')} · ${escapeHtml(s.paymentMethod || '—')}</div>
       </div>
       <div class="tcell"><span class="chip">${seller}</span></div>
-      <div class="tcell tnum"><strong>${fmtMoney(s.amount)}</strong></div>
-      <div class="tcell">${s.paymentMethod || '—'}</div>
-      <div class="tcell tactions">
-        <button class="btn sm" data-open="${s.id}" type="button">Detalhes</button>
+      <div class="tcell tnum">
+        <div class="tvalue">
+          <strong>${fmtMoney(s.amount)}</strong>
+          <button class="btn sm" data-open="${s.id}" type="button">Detalhes</button>
+        </div>
       </div>
     `
     row.addEventListener('click', e=>{

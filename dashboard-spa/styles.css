@@ -465,7 +465,7 @@ body:not(.theme-light) input[type="date"].input::-webkit-calendar-picker-indicat
 }
 .trow{
   display:grid;
-  grid-template-columns: 120px minmax(160px, 1.2fr) 160px 130px minmax(140px, 1fr) 110px;
+  grid-template-columns: 120px minmax(240px, 1.2fr) 170px minmax(220px, 1fr);
   gap:10px;
   align-items:center;
   padding:12px 12px;
@@ -488,6 +488,7 @@ body:not(.theme-light) input[type="date"].input::-webkit-calendar-picker-indicat
 .tphone{font-family:var(--mono); font-size:12px; word-break:break-all}
 .tnum{text-align:right}
 .tnum strong{font-family:var(--mono)}
+.tvalue{display:flex; gap:10px; justify-content:flex-end; align-items:center; flex-wrap:wrap}
 .tactions{display:flex; justify-content:flex-end}
 .trow.clickable{cursor:pointer; transition:background .12s ease}
 .trow.clickable:hover{background:rgba(79,70,229,.06)}
