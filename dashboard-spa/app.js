@@ -1248,7 +1248,7 @@ function renderClientes(list=db.customers){
         <div class="tmain">${c.name}</div>
         <div class="tmuted">${c.source || '—'}</div>
       </div>
-      <div class="tcell">${c.phone || '—'}</div>
+      <div class="tcell"><span class="tphone">${escapeHtml(c.phone || '—')}</span></div>
       <div class="tcell"><span class="chip">${stageLabel}</span></div>
       <div class="tcell tnum">${csalesCount}</div>
       <div class="tcell tnum"><strong>${fmtMoney(csalesTotal)}</strong></div>

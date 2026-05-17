@@ -443,6 +443,7 @@ body:not(.theme-light) input[type="date"].input::-webkit-calendar-picker-indicat
   border-radius:var(--radius-lg);
   padding:16px;
   box-shadow:var(--shadow2);
+  min-width:0;
 }
 .panel-head{
   display:flex;
@@ -484,6 +485,7 @@ body:not(.theme-light) input[type="date"].input::-webkit-calendar-picker-indicat
 .tcell{min-width:0}
 .tmain{font-weight:800; letter-spacing:.1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .tmuted{margin-top:4px; font-size:12px; color:var(--muted2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.tphone{font-family:var(--mono); font-size:12px; word-break:break-all}
 .tnum{text-align:right}
 .tnum strong{font-family:var(--mono)}
 .tactions{display:flex; justify-content:flex-end}
@@ -624,12 +626,14 @@ body:not(.theme-light) input[type="date"].input::-webkit-calendar-picker-indicat
   gap:14px;
   align-items:start;
 }
+.layout-split > *{min-width:0}
 .card{
   background:var(--card);
   border:1px solid var(--border);
   border-radius:var(--radius-lg);
   padding:16px;
   box-shadow:var(--shadow2);
+  min-width:0;
 }
 .card h3{margin:0 0 10px; font-size:15px}
 .form{display:grid; gap:10px}
