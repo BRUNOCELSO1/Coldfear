@@ -781,6 +781,15 @@ qs('#btn-refresh')?.addEventListener('click', async ()=>{
   refreshAll()
 })
 
+qs('#btn-logout')?.addEventListener('click', async ()=>{
+  const ok = window.confirm('Terminar sessão?')
+  if(!ok) return
+  try{ await remoteSignOut() }catch{}
+  try{ stopRemoteSync() }catch{}
+  setAuthed(false)
+  setLocked(true)
+})
+
 qs('#shortcut-venda')?.addEventListener('click', ()=>{
   navTo('vendas')
   qs('#venda-cliente-nome')?.focus()
