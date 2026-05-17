@@ -1,9 +1,37 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm'
 
+const APP_BUILD = 'build-20260516-1'
 const PT = new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' })
 const TZ = 'Europe/Lisbon'
 const qs = (s, el=document) => el.querySelector(s)
 const qsa = (s, el=document) => [...el.querySelectorAll(s)]
+
+const THEME_KEY = 'cf_theme'
+function applyTheme(theme){
+  document.body.classList.toggle('theme-light', theme === 'light')
+  const btn = qs('#theme-toggle')
+  if(btn){
+    const isLight = theme === 'light'
+    btn.textContent = isLight ? 'Light' : 'Dark'
+    btn.setAttribute('aria-label', isLight ? 'Mudar para tema escuro' : 'Mudar para tema claro')
+  }
+}
+function initTheme(){
+  let theme = null
+  try{ theme = localStorage.getItem(THEME_KEY) }catch{}
+  if(theme !== 'light' && theme !== 'dark'){
+    theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark'
+  }
+  applyTheme(theme)
+  const btn = qs('#theme-toggle')
+  if(btn){
+    btn.addEventListener('click', ()=>{
+      const next = document.body.classList.contains('theme-light') ? 'dark' : 'light'
+      applyTheme(next)
+      try{ localStorage.setItem(THEME_KEY, next) }catch{}
+    })
+  }
+}
 
 const DB_KEY = 'cf_data_v1'
 let storageMode = 'local'
@@ -27,6 +55,7 @@ const SELLERS = [
 const VIEW_META = {
   dashboard: { title: 'Dashboard' },
   vendas: { title: 'Vendas' },
+  'todas-vendas': { title: 'Todas as vendas' },
   investir: { title: 'Investir' },
   historico: { title: 'Histórico' },
   clientes: { title: 'Clientes' }
@@ -52,6 +81,13 @@ function normalizePhone(phone){
   const p = String(phone||'').trim()
   const digits = p.replace(/\D/g, '')
   return digits
+}
+function validatePhone(phone){
+  const raw = String(phone || '').trim()
+  const digits = normalizePhone(raw)
+  if(!digits) return { ok:false, message:'Telemóvel é obrigatório.' }
+  if(digits.length < 9) return { ok:false, message:'Telemóvel inválido.' }
+  return { ok:true, value: raw }
 }
 function normalizeDB(next){
   if(!next || typeof next !== 'object') return { customers: [], sales: [], investments: [] }
@@ -102,6 +138,13 @@ function normalizeDB(next){
   return next
 }
 let db = normalizeDB({ customers: [], sales: [], investments: [] })
+
+try{ initTheme() }catch{}
+
+try{
+  const b = qs('#build-id')
+  if(b) b.textContent = APP_BUILD
+}catch{}
 
 function setHidden(id, hidden){
   const el = qs(id)
@@ -302,7 +345,8 @@ function openSaleModal(saleId){
   })
 
   if(c){
-    document.getElementById('modal-open-customer')?.addEventListener('click', ()=>{
+    const btn = document.getElementById('modal-open-customer')
+    btn?.addEventListener('click', ()=>{
       closeModal()
       openCustomerModal(c.id)
     })
@@ -340,7 +384,8 @@ function openSaleEditModal(saleId){
           </div>
           <div class="field">
             <span class="label">Telemóvel</span>
-            <input id="edit-customer-phone" class="input" type="tel" value="${escapeHtml(c?.phone || '')}" placeholder="Opcional" />
+            <input id="edit-customer-phone" class="input" type="tel" value="${escapeHtml(c?.phone || '')}" placeholder="Ex.: 3519xxxxxxxx" />
+            <span class="help">Obrigatório e único.</span>
           </div>
           <div class="form-grid">
             <div class="field">
@@ -381,6 +426,11 @@ function openSaleEditModal(saleId){
     const errEl = '#edit-sale-error'
     setError(errEl, '')
     const phone = qs('#edit-customer-phone')?.value?.trim() || ''
+    const pv = validatePhone(phone)
+    if(!pv.ok){
+      setError(errEl, pv.message)
+      return
+    }
     const date = qs('#edit-sale-date')?.value || ''
     const occurredAt = date ? occurredAtFromDateInput(date) : s.occurredAt
     const amountRaw = qs('#edit-sale-amount')?.value ?? ''
@@ -397,8 +447,8 @@ function openSaleEditModal(saleId){
       return
     }
     try{
-      if(c && phone !== String(c.phone || '').trim()){
-        await updateCustomerPhone(c.id, phone)
+      if(c && pv.value !== String(c.phone || '').trim()){
+        await updateCustomerPhone(c.id, pv.value)
       }
       await updateSale(saleId, { occurredAt, amount, sellerId, paymentMethod, notes })
       refreshAll()
@@ -491,7 +541,17 @@ async function initStorage(){
   if(cfg){
     storageMode = 'supabase'
     supabaseCfg = cfg
-    supabase = createClient(cfg.url, cfg.anonKey)
+    let storage = undefined
+    try{ storage = window.localStorage }catch{}
+    supabase = createClient(cfg.url, cfg.anonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storage,
+        storageKey: 'cf_supabase_auth_v1'
+      }
+    })
   }else{
     const host = String(window.location?.hostname || '').toLowerCase()
     const isDevHost = host === 'localhost' || host === '127.0.0.1' || host === '::1'
@@ -519,7 +579,19 @@ function resolveLoginEmail(rawLogin){
 async function getRemoteSession(){
   if(storageMode !== 'supabase' || !supabase) return null
   const { data } = await supabase.auth.getSession()
-  return data?.session || null
+  if(data?.session) return data.session
+  return await new Promise(resolve=>{
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session)=>{
+      if(event === 'INITIAL_SESSION'){
+        sub?.subscription?.unsubscribe()
+        resolve(session || null)
+      }
+    })
+    setTimeout(()=>{
+      sub?.subscription?.unsubscribe()
+      resolve(null)
+    }, 1200)
+  })
 }
 async function remoteSignIn(login, password){
   const email = resolveLoginEmail(login)
@@ -669,6 +741,7 @@ function navTo(view){
     else b.removeAttribute('aria-current')
   })
   if(view==='historico') renderHistory()
+  if(view==='todas-vendas') renderAllSales()
   if(view==='vendas'){
     populateClientesDatalist()
     populateSociosSelect()
@@ -797,6 +870,37 @@ async function addSale({customerId, quickCustomer, occurredAt, amount, sellerId,
     return s
   }
 }
+async function updateSale(saleId, patch){
+  const s = db.sales.find(x=>x.id===saleId)
+  if(!s) return null
+  const next = {
+    occurredAt: patch.occurredAt ?? s.occurredAt,
+    amount: patch.amount ?? s.amount,
+    sellerId: patch.sellerId ?? s.sellerId,
+    paymentMethod: patch.paymentMethod ?? s.paymentMethod,
+    notes: patch.notes ?? s.notes
+  }
+  s.occurredAt = next.occurredAt
+  s.amount = Number(next.amount || 0)
+  s.sellerId = next.sellerId
+  s.paymentMethod = next.paymentMethod
+  s.notes = next.notes
+
+  if(storageMode === 'supabase' && supabase){
+    const row = {
+      occurred_at: s.occurredAt,
+      amount: Number(s.amount || 0),
+      seller_id: SELLERS.some(x=>x.id===s.sellerId) ? s.sellerId : (SELLERS[0]?.id || 'jusepp'),
+      payment_method: s.paymentMethod ? s.paymentMethod : null,
+      notes: s.notes ? s.notes : null
+    }
+    const { error } = await supabase.from('sales').update(row).eq('id', saleId)
+    if(error) throw error
+  }else{
+    saveDB(db)
+  }
+  return s
+}
 async function addInvestment({platform, campaign, occurredOn, amount, notes}){
   if(storageMode === 'supabase' && supabase){
     const row = {
@@ -837,36 +941,6 @@ async function updateCustomerName(customerId, nextName){
   }else{
     saveDB(db)
   }
-}
-async function updateSale(saleId, patch){
-  const s = db.sales.find(x=>x.id===saleId)
-  if(!s) return null
-  const next = {
-    occurredAt: patch.occurredAt ?? s.occurredAt,
-    amount: patch.amount ?? s.amount,
-    sellerId: patch.sellerId ?? s.sellerId,
-    paymentMethod: patch.paymentMethod ?? s.paymentMethod,
-    notes: patch.notes ?? s.notes
-  }
-  s.occurredAt = next.occurredAt
-  s.amount = Number(next.amount || 0)
-  s.sellerId = next.sellerId
-  s.paymentMethod = next.paymentMethod
-  s.notes = next.notes
-  if(storageMode === 'supabase' && supabase){
-    const row = {
-      occurred_at: s.occurredAt,
-      amount: Number(s.amount || 0),
-      seller_id: SELLERS.some(x=>x.id===s.sellerId) ? s.sellerId : (SELLERS[0]?.id || 'jusepp'),
-      payment_method: s.paymentMethod ? s.paymentMethod : null,
-      notes: s.notes ? s.notes : null
-    }
-    const { error } = await supabase.from('sales').update(row).eq('id', saleId)
-    if(error) throw error
-  }else{
-    saveDB(db)
-  }
-  return s
 }
 async function updateCustomerPhone(customerId, nextPhone){
   const c = db.customers.find(c=>c.id===customerId)
@@ -944,11 +1018,9 @@ function readPeriod(){
     const d = new Date()
     from = new Date(d.getFullYear(), d.getMonth(), d.getDate()-1)
     to = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  }else if(pSel==='7'){
-    from = new Date(Date.now()-7*86400000)
-  }else if(pSel==='30'){
-    from = new Date(Date.now()-30*86400000)
-  }else if(pSel==='mes'){
+  }else if(pSel==='7') from = new Date(Date.now()-7*86400000)
+  else if(pSel==='30') from = new Date(Date.now()-30*86400000)
+  else if(pSel==='mes'){
     const d = new Date()
     from = new Date(d.getFullYear(), d.getMonth(), 1)
   }else{
@@ -1049,13 +1121,26 @@ function renderRecent(m){
       const c = db.customers.find(c=>c.id===it.customerId)
       const s = db.sales.find(x=>x.id===it.id)
       const seller = SELLERS.find(x=>x.id===s?.sellerId)?.label || '—'
+      if(s) div.classList.add('clickable')
       div.innerHTML = `
         <div>
           <div><strong>Venda</strong> <span class="chip">${fmtMoney(it.value)}</span></div>
           <div class="meta"><span>${c?c.name:'Cliente'}</span><span>${fmtDateTime(it.at)}</span><span class="chip">${seller}</span></div>
         </div>
-        <div class="meta"><span class="chip">+ Receita</span></div>
+        <div class="row">
+          <button data-open-sale="${s?.id || ''}" class="btn">Detalhes</button>
+        </div>
       `
+      if(s){
+        div.addEventListener('click', e=>{
+          if(e.target.closest('button')) return
+          openSaleModal(s.id)
+        })
+        div.querySelector('[data-open-sale]')?.addEventListener('click', e=>{
+          e.stopPropagation()
+          openSaleModal(s.id)
+        })
+      }
     }else{
       div.innerHTML = `
         <div>
@@ -1112,65 +1197,91 @@ function populateSociosSelect(){
 function renderClientes(list=db.customers){
   const el = qs('#clientes-list')
   el.innerHTML = ''
-  list
+  const items = list
     .slice()
     .sort((a,b)=> (a.name||'').localeCompare(b.name||''))
-    .forEach(c=>{
-      const div = document.createElement('div')
-      div.className='item clickable'
-      const stageLabel = (STAGES.find(s=>s.id===c.stage) || STAGES[0]).label
-      const csales = db.sales.filter(s=>s.customerId===c.id)
-      const csalesCount = csales.length
-      const csalesTotal = csales.reduce((a,s)=>a+Number(s.amount||0),0)
-      div.innerHTML = `
-        <div>
-          <div><strong>${c.name}</strong></div>
-          <div class="meta">
-            <span>${c.phone || '—'}</span>
-            <span>${c.source || '—'}</span>
-            <span class="chip">${stageLabel}</span>
-            <span class="chip">${csalesCount} vendas</span>
-            <span class="chip">${fmtMoney(csalesTotal)}</span>
-          </div>
+
+  if(!items.length){
+    const empty = document.createElement('div')
+    empty.className = 'empty'
+    empty.textContent = 'Sem clientes para mostrar.'
+    el.appendChild(empty)
+    return
+  }
+
+  const head = document.createElement('div')
+  head.className = 'trow thead'
+  head.innerHTML = `
+    <div class="tcell">Cliente</div>
+    <div class="tcell">Telemóvel</div>
+    <div class="tcell">Etapa</div>
+    <div class="tcell tnum">Vendas</div>
+    <div class="tcell tnum">Total</div>
+    <div class="tcell tactions">Ações</div>
+  `
+  el.appendChild(head)
+
+  items.forEach(c=>{
+    const stageLabel = (STAGES.find(s=>s.id===c.stage) || STAGES[0]).label
+    const csales = db.sales.filter(s=>s.customerId===c.id)
+    const csalesCount = csales.length
+    const csalesTotal = csales.reduce((a,s)=>a+Number(s.amount||0),0)
+
+    const row = document.createElement('div')
+    row.className = 'trow clickable'
+    row.innerHTML = `
+      <div class="tcell">
+        <div class="tmain">${c.name}</div>
+        <div class="tmuted">${c.source || '—'}</div>
+      </div>
+      <div class="tcell">${c.phone || '—'}</div>
+      <div class="tcell"><span class="chip">${stageLabel}</span></div>
+      <div class="tcell tnum">${csalesCount}</div>
+      <div class="tcell tnum"><strong>${fmtMoney(csalesTotal)}</strong></div>
+      <div class="tcell tactions">
+        <div class="row" style="justify-content:flex-end">
+          <button data-edit="${c.id}" class="btn sm" type="button">Editar</button>
+          <button data-del="${c.id}" class="btn sm danger" type="button">Remover</button>
         </div>
-        <div class="row">
-          <button data-edit="${c.id}" class="btn">Editar</button>
-          <button data-del="${c.id}" class="btn danger">Remover</button>
-        </div>
-      `
-      div.addEventListener('click', e=>{
-        if(e.target.closest('button')) return
-        openCustomerModal(c.id)
-      })
-      div.querySelector('[data-del]').addEventListener('click', async ()=>{
-        const ok = confirm('Remover cliente e as vendas associadas?')
-        if(!ok) return
-        setError('#cliente-error', '')
-        try{
-          await deleteCustomerAndSales(c.id)
-          refreshAll()
-        }catch(err){
-          setError('#cliente-error', err?.message || 'Erro ao remover cliente.')
-        }
-      })
-      div.querySelector('[data-edit]').addEventListener('click', async ()=>{
-        const next = prompt('Editar nome completo:', c.name)
-        if(next===null) return
-        const v = validateFullName(next)
-        if(!v.ok){
-          setError('#cliente-error', v.message)
-          return
-        }
-        setError('#cliente-error', '')
-        try{
-          await updateCustomerName(c.id, v.value)
-          refreshAll()
-        }catch(err){
-          setError('#cliente-error', err?.message || 'Erro ao atualizar cliente.')
-        }
-      })
-      el.appendChild(div)
+      </div>
+    `
+
+    row.addEventListener('click', e=>{
+      if(e.target.closest('button')) return
+      openCustomerModal(c.id)
     })
+
+    row.querySelector('[data-del]').addEventListener('click', async ()=>{
+      const ok = confirm('Remover cliente e as vendas associadas?')
+      if(!ok) return
+      setError('#cliente-error', '')
+      try{
+        await deleteCustomerAndSales(c.id)
+        refreshAll()
+      }catch(err){
+        setError('#cliente-error', err?.message || 'Erro ao remover cliente.')
+      }
+    })
+
+    row.querySelector('[data-edit]').addEventListener('click', async ()=>{
+      const next = prompt('Editar nome completo:', c.name)
+      if(next===null) return
+      const v = validateFullName(next)
+      if(!v.ok){
+        setError('#cliente-error', v.message)
+        return
+      }
+      setError('#cliente-error', '')
+      try{
+        await updateCustomerName(c.id, v.value)
+        refreshAll()
+      }catch(err){
+        setError('#cliente-error', err?.message || 'Erro ao atualizar cliente.')
+      }
+    })
+
+    el.appendChild(row)
+  })
 }
 
 function renderVendas(){
@@ -1208,6 +1319,142 @@ function renderVendas(){
       }catch(err){}
     })
     el.appendChild(div)
+  })
+}
+
+let allSalesLastItems = []
+function renderAllSales(){
+  const el = qs('#all-sales-table')
+  if(!el) return
+  const subtitle = qs('#all-sales-customers')
+
+  const q = String(qs('#all-sales-search')?.value || '').trim().toLowerCase()
+  const sellerFilter = String(qs('#all-sales-seller')?.value || 'all')
+  const from = String(qs('#all-sales-from')?.value || '').trim()
+  const to = String(qs('#all-sales-to')?.value || '').trim()
+
+  let items = [...db.sales].sort((a,b)=> new Date(b.occurredAt)-new Date(a.occurredAt))
+
+  if(sellerFilter && sellerFilter !== 'all'){
+    items = items.filter(s=>s.sellerId === sellerFilter)
+  }
+  if(from){
+    items = items.filter(s=> dayKeyFromISO(s.occurredAt) >= from)
+  }
+  if(to){
+    items = items.filter(s=> dayKeyFromISO(s.occurredAt) <= to)
+  }
+  if(q){
+    items = items.filter(s=>{
+      const c = db.customers.find(c=>c.id===s.customerId)
+      const seller = SELLERS.find(x=>x.id===s.sellerId)?.label || ''
+      const hay = [
+        c?.name || '',
+        c?.phone || '',
+        seller,
+        s.paymentMethod || '',
+        s.notes || '',
+        String(s.amount || '')
+      ].join(' ').toLowerCase()
+      return hay.includes(q)
+    })
+  }
+
+  const total = items.reduce((a,s)=>a+Number(s.amount||0),0)
+  allSalesLastItems = items
+  if(subtitle) subtitle.textContent = `${items.length} vendas · ${fmtMoney(total)} · Ver clientes`
+
+  el.innerHTML = ''
+  if(!items.length){
+    const empty = document.createElement('div')
+    empty.className = 'empty'
+    empty.textContent = 'Sem vendas para os filtros selecionados.'
+    el.appendChild(empty)
+    return
+  }
+
+  const head = document.createElement('div')
+  head.className = 'trow thead'
+  head.innerHTML = `
+    <div class="tcell">Data</div>
+    <div class="tcell">Cliente</div>
+    <div class="tcell">Sócio</div>
+    <div class="tcell tnum">Valor</div>
+    <div class="tcell">Método</div>
+    <div class="tcell tactions">Ações</div>
+  `
+  el.appendChild(head)
+
+  items.forEach(s=>{
+    const c = db.customers.find(c=>c.id===s.customerId)
+    const seller = SELLERS.find(x=>x.id===s.sellerId)?.label || '—'
+    const row = document.createElement('div')
+    row.className = 'trow clickable'
+    row.innerHTML = `
+      <div class="tcell">${fmtDateOnlyFromISO(s.occurredAt)}</div>
+      <div class="tcell">
+        <div class="tmain">${c ? c.name : 'Cliente'}</div>
+        <div class="tmuted">${c?.phone || '—'}</div>
+      </div>
+      <div class="tcell"><span class="chip">${seller}</span></div>
+      <div class="tcell tnum"><strong>${fmtMoney(s.amount)}</strong></div>
+      <div class="tcell">${s.paymentMethod || '—'}</div>
+      <div class="tcell tactions">
+        <button class="btn sm" data-open="${s.id}" type="button">Detalhes</button>
+      </div>
+    `
+    row.addEventListener('click', e=>{
+      if(e.target.closest('button')) return
+      openSaleModal(s.id)
+    })
+    row.querySelector('[data-open]')?.addEventListener('click', e=>{
+      e.stopPropagation()
+      openSaleModal(s.id)
+    })
+    el.appendChild(row)
+  })
+}
+
+function openAllSalesCustomers(){
+  const byId = new Map()
+  for(const s of allSalesLastItems || []){
+    const c = db.customers.find(c=>c.id===s.customerId)
+    if(!c) continue
+    const cur = byId.get(c.id) || { customer: c, count: 0, total: 0 }
+    cur.count += 1
+    cur.total += Number(s.amount || 0)
+    byId.set(c.id, cur)
+  }
+  const items = [...byId.values()].sort((a,b)=> b.total - a.total)
+  const bodyHtml = items.length
+    ? `<div class="list">${items.map(x=>`
+        <div class="item clickable" data-open-customer="${escapeHtml(x.customer.id)}">
+          <div>
+            <div><strong>${escapeHtml(x.customer.name || 'Cliente')}</strong></div>
+            <div class="meta">
+              <span>${escapeHtml(x.customer.phone || '—')}</span>
+              <span class="chip">${x.count} vendas</span>
+              <span class="chip">${fmtMoney(x.total)}</span>
+            </div>
+          </div>
+          <div class="row"><button class="btn sm" type="button">Abrir</button></div>
+        </div>
+      `).join('')}</div>`
+    : `<div class="empty">Sem clientes para os filtros selecionados.</div>`
+
+  openModal({
+    title: 'Clientes deste período',
+    subtitle: `${items.length} clientes`,
+    bodyHtml
+  })
+
+  qsa('[data-open-customer]', qs('#modal-body')).forEach(row=>{
+    row.addEventListener('click', e=>{
+      if(e.target.closest('button')){ e.stopPropagation() }
+      const id = row.dataset.openCustomer
+      closeModal()
+      openCustomerModal(id)
+    })
   })
 }
 
@@ -1477,6 +1724,7 @@ function refreshAll(opts={}){
     populateClientesDatalist()
     renderClientes()
     renderVendas()
+    renderAllSales()
     renderInvestimentos()
     updateKPIs()
     renderHistory()
@@ -1504,7 +1752,7 @@ qs('#form-cliente').addEventListener('submit', async e=>{
   e.preventDefault()
   setError('#cliente-error', '')
   const nameRaw = qs('#cliente-nome').value
-  const phone = qs('#cliente-telemovel').value.trim()
+  const phoneRaw = qs('#cliente-telemovel').value.trim()
   const source = qs('#cliente-origem').value.trim()
   const profileUrl = qs('#cliente-perfil').value.trim()
   const notes = qs('#cliente-notas').value.trim()
@@ -1515,8 +1763,14 @@ qs('#form-cliente').addEventListener('submit', async e=>{
     return
   }
 
+  const pv = validatePhone(phoneRaw)
+  if(!pv.ok){
+    setError('#cliente-error', pv.message)
+    return
+  }
+  const phone = pv.value
   const phoneKey = normalizePhone(phone)
-  if(phoneKey && db.customers.some(c=>normalizePhone(c.phone)===phoneKey)){
+  if(db.customers.some(c=>normalizePhone(c.phone)===phoneKey)){
     setError('#cliente-error', 'Já existe um cliente com este nº.')
     return
   }
@@ -1535,15 +1789,20 @@ qs('#cliente-limpar').addEventListener('click', ()=>{
   setError('#cliente-error', '')
 })
 
+let saleSubmitBusy = false
 qs('#form-venda').addEventListener('submit', async e=>{
   e.preventDefault()
+  if(saleSubmitBusy) return
+  saleSubmitBusy = true
+  const submitBtn = e.target.querySelector('button[type="submit"]')
+  if(submitBtn) submitBtn.disabled = true
   setError('#venda-error', '')
   const customerNameRaw = qs('#venda-cliente-nome').value
   populateSociosSelect()
   const sellerId = qs('#venda-socio').value
   const quickPhone = qs('#venda-quick-telemovel').value.trim()
   const occurredOn = qs('#venda-data').value
-  const occurredAt = occurredOn ? dateFromYMD(occurredOn).toISOString() : new Date().toISOString()
+  const occurredAt = occurredAtFromDateInput(occurredOn)
   const amountRaw = qs('#venda-valor').value
   const amount = amountRaw==='' ? 0 : Number(amountRaw)
   const paymentMethod = qs('#venda-metodo').value.trim()
@@ -1566,7 +1825,17 @@ qs('#form-venda').addEventListener('submit', async e=>{
 
   const customerName = v.value
   const existing = db.customers.find(c => String(c.name||'').trim().toLowerCase() === customerName.toLowerCase())
+  if(!existing || !normalizePhone(existing.phone)){
+    const pv = validatePhone(quickPhone)
+    if(!pv.ok){
+      setError('#venda-error', pv.message)
+      return
+    }
+  }
   try{
+    if(existing && quickPhone && quickPhone !== String(existing.phone || '').trim()){
+      await updateCustomerPhone(existing.id, quickPhone)
+    }
     const customerId = existing ? existing.id : (await upsertCustomer({ name: customerName, phone: quickPhone, stage: 'novo' })).id
     await addSale({ customerId, quickCustomer: null, occurredAt, amount, sellerId, paymentMethod, notes })
     e.target.reset()
@@ -1576,6 +1845,9 @@ qs('#form-venda').addEventListener('submit', async e=>{
     refreshAll()
   }catch(err){
     setError('#venda-error', err?.message || 'Erro ao guardar venda.')
+  }finally{
+    saleSubmitBusy = false
+    if(submitBtn) submitBtn.disabled = false
   }
 })
 
@@ -1637,8 +1909,15 @@ qs('#pipeline-add-btn').addEventListener('click', async ()=>{
     setError('#pipeline-error', v.message)
     return
   }
+  const phoneRaw = prompt('Telemóvel do cliente:', '')
+  if(phoneRaw === null) return
+  const pv = validatePhone(phoneRaw)
+  if(!pv.ok){
+    setError('#pipeline-error', pv.message)
+    return
+  }
   try{
-    await upsertCustomer({ name: v.value, phone: '', stage: 'novo' })
+    await upsertCustomer({ name: v.value, phone: pv.value, stage: 'novo' })
     qs('#pipeline-add-name').value = ''
     refreshAll()
   }catch(err){
@@ -1750,20 +2029,20 @@ function renderHistory(){
       if(x.type==='sale'){
         const c = db.customers.find(c=>c.id===x.sale.customerId)
         const seller = SELLERS.find(s=>s.id===x.sale.sellerId)?.label || '—'
+        div.classList.add('clickable')
         div.innerHTML = `
           <div>
             <div><strong>Venda</strong> <span class="chip">${fmtMoney(x.sale.amount)}</span> <span class="chip">${seller}</span></div>
             <div class="meta">
-              <span>${c ? `<button type="button" class="link-btn" data-open-customer="${c.id}">${escapeHtml(c.name)}</button>` : 'Cliente'}</span>
+              ${c ? `<button type="button" class="link-btn" data-open-customer="${c.id}">${escapeHtml(c.name)}</button>` : `<span>Cliente</span>`}
               <span>${fmtDateTime(x.sale.occurredAt)}</span>
             </div>
           </div>
           <div class="row">
-            <span class="chip">${x.sale.paymentMethod || '—'}</span>
-            <button type="button" class="btn" data-open-sale="${x.sale.id}">Detalhes</button>
+            <span class="chip">${escapeHtml(x.sale.paymentMethod || '—')}</span>
+            <button data-open-sale="${x.sale.id}" class="btn">Detalhes</button>
           </div>
         `
-        div.classList.add('clickable')
         div.addEventListener('click', e=>{
           if(e.target.closest('button')) return
           openSaleModal(x.sale.id)
@@ -1772,10 +2051,12 @@ function renderHistory(){
           e.stopPropagation()
           openSaleModal(x.sale.id)
         })
-        div.querySelector('[data-open-customer]')?.addEventListener('click', e=>{
-          e.stopPropagation()
-          openCustomerModal(e.target.getAttribute('data-open-customer'))
-        })
+        if(c){
+          div.querySelector('[data-open-customer]')?.addEventListener('click', e=>{
+            e.stopPropagation()
+            openCustomerModal(c.id)
+          })
+        }
       }else{
         div.innerHTML = `
           <div>
@@ -1848,6 +2129,79 @@ qs('#hist-filtrar').addEventListener('click', renderHistory)
 qs('#hist-tipo').addEventListener('change', renderHistory)
 qs('#hist-from').addEventListener('change', renderHistory)
 qs('#hist-to').addEventListener('change', renderHistory)
+
+qs('#all-sales-search')?.addEventListener('input', renderAllSales)
+qs('#all-sales-seller')?.addEventListener('change', renderAllSales)
+qs('#all-sales-customers')?.addEventListener('click', openAllSalesCustomers)
+
+function ymdInTZ(d){
+  return d.toLocaleDateString('en-CA', { timeZone: TZ })
+}
+function applyAllSalesPeriod(period){
+  const fromEl = qs('#all-sales-from')
+  const toEl = qs('#all-sales-to')
+  if(!fromEl || !toEl) return
+
+  if(period === 'all'){
+    fromEl.value = ''
+    toEl.value = ''
+    return
+  }
+  if(period === 'custom') return
+
+  const today = new Date()
+  const todayYMD = ymdInTZ(today)
+
+  if(period === 'today'){
+    fromEl.value = todayYMD
+    toEl.value = todayYMD
+    return
+  }
+  if(period === 'yesterday'){
+    const d = new Date()
+    d.setDate(d.getDate() - 1)
+    const y = ymdInTZ(d)
+    fromEl.value = y
+    toEl.value = y
+    return
+  }
+  if(period === 'month'){
+    const d = new Date()
+    const first = new Date(d.getFullYear(), d.getMonth(), 1)
+    fromEl.value = ymdInTZ(first)
+    toEl.value = todayYMD
+    return
+  }
+  if(period === '7' || period === '30'){
+    const days = Number(period)
+    const start = new Date()
+    start.setDate(start.getDate() - (days - 1))
+    fromEl.value = ymdInTZ(start)
+    toEl.value = todayYMD
+  }
+}
+
+qs('#all-sales-period')?.addEventListener('change', e=>{
+  applyAllSalesPeriod(e.target.value)
+  renderAllSales()
+})
+
+qs('#all-sales-from')?.addEventListener('change', ()=>{
+  const p = qs('#all-sales-period'); if(p) p.value = 'custom'
+  renderAllSales()
+})
+qs('#all-sales-to')?.addEventListener('change', ()=>{
+  const p = qs('#all-sales-period'); if(p) p.value = 'custom'
+  renderAllSales()
+})
+qs('#all-sales-clear')?.addEventListener('click', ()=>{
+  const a = qs('#all-sales-search'); if(a) a.value = ''
+  const p = qs('#all-sales-period'); if(p) p.value = 'all'
+  const b = qs('#all-sales-seller'); if(b) b.value = 'all'
+  const c = qs('#all-sales-from'); if(c) c.value = ''
+  const d = qs('#all-sales-to'); if(d) d.value = ''
+  renderAllSales()
+})
 
 function boot(){
   ;(async ()=>{
