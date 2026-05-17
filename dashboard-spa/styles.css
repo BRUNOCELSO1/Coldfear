@@ -79,7 +79,7 @@ button{cursor:pointer}
   box-shadow:var(--shadow);
   display:grid;
   grid-template-columns:260px 1fr;
-  overflow:hidden;
+  overflow:auto;
   position:relative;
 }
 .app-shell::before{
