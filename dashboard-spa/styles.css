@@ -464,15 +464,14 @@ body:not(.theme-light) input[type="date"].input::-webkit-calendar-picker-indicat
 }
 .trow{
   display:grid;
-  grid-template-columns: 140px minmax(220px, 1.2fr) 180px 140px 1fr 120px;
+  grid-template-columns: 120px minmax(160px, 1.2fr) 160px 130px minmax(140px, 1fr) 110px;
   gap:10px;
   align-items:center;
   padding:12px 12px;
   border-top:1px solid var(--border);
-  min-width:940px;
 }
 .table.clients .trow{
-  grid-template-columns: minmax(220px, 1.4fr) 160px 180px 120px 140px 140px;
+  grid-template-columns: minmax(200px, 1.4fr) 160px 150px 90px 110px 140px;
 }
 .trow:first-child{border-top:0}
 .trow.thead{
@@ -642,12 +641,19 @@ body:not(.theme-light) input[type="date"].input::-webkit-calendar-picker-indicat
 .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
 .filters{
   display:grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns:repeat(6, minmax(0, 1fr));
   gap:10px;
   align-items:end;
+  width:100%;
   flex:1 1 660px;
 }
-.filters > .btn{justify-self:end}
+.filters > *{min-width:0}
+.filters #all-sales-search{grid-column:span 2}
+.filters #all-sales-period{grid-column:span 2}
+.filters #all-sales-seller{grid-column:span 2}
+.filters #all-sales-from{grid-column:span 2}
+.filters #all-sales-to{grid-column:span 2}
+.filters #all-sales-clear{grid-column:span 2; justify-self:end}
 
 .tabs{
   display:flex;
@@ -799,4 +805,14 @@ body:not(.theme-light) input[type="date"].input::-webkit-calendar-picker-indicat
   .tnum{text-align:left}
   .tactions{justify-content:flex-start}
   .filters{grid-template-columns:1fr}
+}
+
+@media (max-width: 980px){
+  .filters{grid-template-columns:repeat(2, minmax(0, 1fr))}
+  .filters #all-sales-search,
+  .filters #all-sales-period,
+  .filters #all-sales-seller,
+  .filters #all-sales-from,
+  .filters #all-sales-to,
+  .filters #all-sales-clear{grid-column:span 2; justify-self:stretch}
 }

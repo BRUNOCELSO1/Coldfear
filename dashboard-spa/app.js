@@ -1071,6 +1071,11 @@ function renderChart(m){
   const series = days.map(d=> dayTotals.get(d) || 0)
   const ctx = qs('#salesChart').getContext('2d')
   if(chart) chart.destroy()
+  const isLight = document.body.classList.contains('theme-light')
+  const line = '#4f46e5'
+  const grad = ctx.createLinearGradient(0, 0, 0, 260)
+  grad.addColorStop(0, 'rgba(79,70,229,0.28)')
+  grad.addColorStop(1, 'rgba(79,70,229,0)')
   chart = new Chart(ctx, {
     type: 'line',
     data: {
@@ -1078,29 +1083,38 @@ function renderChart(m){
       datasets: [{
         label: 'Vendas (€)',
         data: series,
-        borderColor: '#7b5cf7',
-        backgroundColor: 'rgba(123,92,247,0.25)',
+        borderColor: line,
+        backgroundColor: grad,
         fill: true,
         tension: .35,
-        pointRadius: 0
+        pointRadius: 0,
+        pointHitRadius: 12,
+        borderWidth: 2
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { mode:'index', intersect:false }},
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          mode:'index',
+          intersect:false,
+          callbacks: { label: ctx => PT.format(ctx.parsed.y || 0) }
+        }
+      },
       interaction: { mode:'index', intersect:false },
       scales: {
         x: {
-          ticks: { color: 'rgba(167,176,191,0.85)' },
-          grid: { color: 'rgba(255,255,255,0.06)' }
+          ticks: { color: isLight ? 'rgba(15,23,42,0.70)' : 'rgba(167,176,191,0.85)' },
+          grid: { color: isLight ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.06)' }
         },
         y: {
           ticks: {
-            color: 'rgba(167,176,191,0.85)',
+            color: isLight ? 'rgba(15,23,42,0.70)' : 'rgba(167,176,191,0.85)',
             callback: v => PT.format(v)
           },
-          grid: { color: 'rgba(255,255,255,0.06)' }
+          grid: { color: isLight ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.06)' }
         }
       }
     }
@@ -2137,6 +2151,25 @@ qs('#all-sales-customers')?.addEventListener('click', openAllSalesCustomers)
 function ymdInTZ(d){
   return d.toLocaleDateString('en-CA', { timeZone: TZ })
 }
+function openAllSalesFromDashboard(){
+  const { from, to } = readPeriod()
+  const fromEl = qs('#all-sales-from')
+  const toEl = qs('#all-sales-to')
+  const pEl = qs('#all-sales-period')
+  if(fromEl && from) fromEl.value = ymdInTZ(new Date(from))
+  if(toEl){
+    if(to){
+      const end = new Date(to)
+      end.setMilliseconds(end.getMilliseconds() - 1)
+      toEl.value = ymdInTZ(end)
+    }else{
+      toEl.value = ''
+    }
+  }
+  if(pEl) pEl.value = 'custom'
+  navTo('todas-vendas')
+  renderAllSales()
+}
 function applyAllSalesPeriod(period){
   const fromEl = qs('#all-sales-from')
   const toEl = qs('#all-sales-to')
@@ -2202,6 +2235,9 @@ qs('#all-sales-clear')?.addEventListener('click', ()=>{
   const d = qs('#all-sales-to'); if(d) d.value = ''
   renderAllSales()
 })
+
+qs('#salesChart')?.addEventListener('click', openAllSalesFromDashboard)
+;(qs('#kpi-total-vendido')?.closest('.kpi'))?.addEventListener('click', openAllSalesFromDashboard)
 
 function boot(){
   ;(async ()=>{
