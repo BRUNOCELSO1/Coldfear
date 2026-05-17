@@ -255,6 +255,7 @@ function openSaleModal(saleId){
     subtitle: `${when} · ${seller}`,
     bodyHtml: `
       <div class="row">
+        <button type="button" class="btn" id="modal-edit-sale">Editar</button>
         <button type="button" class="btn danger" id="modal-del-sale">Remover</button>
       </div>
       <div class="detail-grid">
@@ -306,6 +307,9 @@ function openSaleModal(saleId){
       openCustomerModal(c.id)
     })
   }
+  document.getElementById('modal-edit-sale')?.addEventListener('click', ()=>{
+    openSaleEditModal(saleId)
+  })
   document.getElementById('modal-del-sale')?.addEventListener('click', async ()=>{
     const ok = confirm('Remover esta venda?')
     if(!ok) return
@@ -314,6 +318,94 @@ function openSaleModal(saleId){
       closeModal()
       refreshAll()
     }catch(err){}
+  })
+}
+
+function openSaleEditModal(saleId){
+  const s = db.sales.find(x=>x.id===saleId)
+  if(!s) return
+  const c = db.customers.find(x=>x.id===s.customerId)
+  const when = fmtDateTime(s.occurredAt)
+  const ymd = dayKeyFromISO(s.occurredAt)
+  openModal({
+    title: 'Editar venda',
+    subtitle: when,
+    bodyHtml: `
+      <div class="detail-block">
+        <p class="detail-block-title">Dados da venda</p>
+        <div class="form">
+          <div class="field">
+            <span class="label">Cliente</span>
+            <input class="input" value="${escapeHtml(c?.name || '—')}" disabled />
+          </div>
+          <div class="field">
+            <span class="label">Telemóvel</span>
+            <input id="edit-customer-phone" class="input" type="tel" value="${escapeHtml(c?.phone || '')}" placeholder="Opcional" />
+          </div>
+          <div class="form-grid">
+            <div class="field">
+              <span class="label">Data (opcional)</span>
+              <input id="edit-sale-date" class="input" type="date" value="${escapeHtml(ymd)}" />
+            </div>
+            <div class="field">
+              <span class="label">Valor (€)</span>
+              <input id="edit-sale-amount" class="input" type="number" step="0.01" inputmode="decimal" value="${escapeHtml(String(s.amount ?? 0))}" />
+            </div>
+            <div class="field" style="grid-column: span 2;">
+              <span class="label">Sócio</span>
+              <select id="edit-sale-seller" class="input">
+                ${SELLERS.map(x=>`<option value="${x.id}" ${x.id===s.sellerId?'selected':''}>${x.label}</option>`).join('')}
+              </select>
+            </div>
+            <div class="field" style="grid-column: span 2;">
+              <span class="label">Método</span>
+              <input id="edit-sale-method" class="input" type="text" value="${escapeHtml(s.paymentMethod || '')}" placeholder="MBWay, dinheiro, cartão…" />
+            </div>
+          </div>
+          <div class="field">
+            <span class="label">Notas</span>
+            <textarea id="edit-sale-notes" placeholder="Detalhes relevantes…">${escapeHtml(s.notes || '')}</textarea>
+          </div>
+          <div class="row">
+            <button type="button" class="btn primary" id="edit-sale-save">Guardar</button>
+            <button type="button" class="btn" id="edit-sale-cancel">Cancelar</button>
+          </div>
+          <div id="edit-sale-error" class="error hidden" role="alert" aria-live="polite"></div>
+        </div>
+      </div>
+    `
+  })
+
+  document.getElementById('edit-sale-cancel')?.addEventListener('click', ()=> openSaleModal(saleId))
+  document.getElementById('edit-sale-save')?.addEventListener('click', async ()=>{
+    const errEl = '#edit-sale-error'
+    setError(errEl, '')
+    const phone = qs('#edit-customer-phone')?.value?.trim() || ''
+    const date = qs('#edit-sale-date')?.value || ''
+    const occurredAt = date ? occurredAtFromDateInput(date) : s.occurredAt
+    const amountRaw = qs('#edit-sale-amount')?.value ?? ''
+    const amount = amountRaw==='' ? 0 : Number(amountRaw)
+    const sellerId = qs('#edit-sale-seller')?.value || s.sellerId
+    const paymentMethod = qs('#edit-sale-method')?.value?.trim() || ''
+    const notes = qs('#edit-sale-notes')?.value?.trim() || ''
+    if(Number.isNaN(amount) || amount < 0){
+      setError(errEl, 'Valor inválido.')
+      return
+    }
+    if(!SELLERS.some(x=>x.id===sellerId)){
+      setError(errEl, 'Selecione o sócio.')
+      return
+    }
+    try{
+      if(c && phone !== String(c.phone || '').trim()){
+        await updateCustomerPhone(c.id, phone)
+      }
+      await updateSale(saleId, { occurredAt, amount, sellerId, paymentMethod, notes })
+      refreshAll()
+      openSaleModal(saleId)
+    }catch(err){
+      setError(errEl, err?.message || 'Erro ao atualizar venda.')
+    }
   })
 }
 
@@ -548,6 +640,12 @@ function dayKeyFromYMD(ymd){
 }
 function todayISO(){ return new Date().toISOString().slice(0,10) }
 function nowISO(){ const d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16) }
+function occurredAtFromDateInput(ymd){
+  const day = String(ymd || '').trim()
+  if(!day) return new Date().toISOString()
+  if(day === todayISO()) return new Date().toISOString()
+  return dateFromYMD(day).toISOString()
+}
 
 let currentView = 'dashboard'
 function setHeader(view){
@@ -735,6 +833,53 @@ async function updateCustomerName(customerId, nextName){
   c.name = nextName
   if(storageMode === 'supabase' && supabase){
     const { error } = await supabase.from('customers').update({ name: nextName }).eq('id', customerId)
+    if(error) throw error
+  }else{
+    saveDB(db)
+  }
+}
+async function updateSale(saleId, patch){
+  const s = db.sales.find(x=>x.id===saleId)
+  if(!s) return null
+  const next = {
+    occurredAt: patch.occurredAt ?? s.occurredAt,
+    amount: patch.amount ?? s.amount,
+    sellerId: patch.sellerId ?? s.sellerId,
+    paymentMethod: patch.paymentMethod ?? s.paymentMethod,
+    notes: patch.notes ?? s.notes
+  }
+  s.occurredAt = next.occurredAt
+  s.amount = Number(next.amount || 0)
+  s.sellerId = next.sellerId
+  s.paymentMethod = next.paymentMethod
+  s.notes = next.notes
+  if(storageMode === 'supabase' && supabase){
+    const row = {
+      occurred_at: s.occurredAt,
+      amount: Number(s.amount || 0),
+      seller_id: SELLERS.some(x=>x.id===s.sellerId) ? s.sellerId : (SELLERS[0]?.id || 'jusepp'),
+      payment_method: s.paymentMethod ? s.paymentMethod : null,
+      notes: s.notes ? s.notes : null
+    }
+    const { error } = await supabase.from('sales').update(row).eq('id', saleId)
+    if(error) throw error
+  }else{
+    saveDB(db)
+  }
+  return s
+}
+async function updateCustomerPhone(customerId, nextPhone){
+  const c = db.customers.find(c=>c.id===customerId)
+  if(!c) return
+  const phone = String(nextPhone || '').trim()
+  const phoneKey = normalizePhone(phone)
+  if(phoneKey){
+    const exists = db.customers.find(x => x.id !== customerId && normalizePhone(x.phone) === phoneKey)
+    if(exists) throw new Error('Já existe um cliente com este nº.')
+  }
+  c.phone = phone
+  if(storageMode === 'supabase' && supabase){
+    const { error } = await supabase.from('customers').update({ phone: phone ? phone : null }).eq('id', customerId)
     if(error) throw error
   }else{
     saveDB(db)
