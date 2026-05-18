@@ -732,9 +732,9 @@ function futureStatusOf(item){
   const t = todayISO()
   const d = String(item?.dueOn||'').trim()
   if(!d) return { label:'—', cls:'' }
-  if(d < t) return { label:'Atrasado', cls:'late' }
-  if(d === t) return { label:'Vence hoje', cls:'due' }
-  return { label:'Em dia', cls:'ok' }
+  if(d < t) return { label:'Contactar', cls:'late' }
+  if(d === t) return { label:'Contactar hoje', cls:'due' }
+  return { label:'Agendado', cls:'ok' }
 }
 
 function populateFutureDatalist(){
