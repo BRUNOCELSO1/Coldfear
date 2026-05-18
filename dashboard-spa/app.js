@@ -1357,8 +1357,9 @@ function computeMetrics(range){
   const numSales = sales.length
   const ticket = numSales>0 ? totalSold/numSales : 0
   const totalInvested = investments.reduce((a,b)=>a+b.amount,0)
+  const profit = totalSold - totalInvested
   const roi = totalInvested>0 ? ((totalSold-totalInvested)/totalInvested)*100 : null
-  return { from, to, totalSold, numSales, ticket, totalInvested, roi, sales, investments }
+  return { from, to, totalSold, numSales, ticket, totalInvested, profit, roi, sales, investments }
 }
 
 function readPeriod(){
@@ -1409,6 +1410,8 @@ function updateKPIs(){
   qs('#kpi-num-vendas').textContent = String(m.numSales)
   qs('#kpi-ticket-medio').textContent = m.numSales? fmtMoney(m.ticket): '—'
   qs('#kpi-total-investido').textContent = fmtMoney(m.totalInvested)
+  const lucroEl = qs('#kpi-lucro')
+  if(lucroEl) lucroEl.textContent = fmtMoney(m.profit)
   qs('#kpi-roi').textContent = m.roi===null ? '—' : `${m.roi.toFixed(1)}%`
   renderChart(m)
   renderRecent(m)
