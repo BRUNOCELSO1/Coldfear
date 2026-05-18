@@ -41,25 +41,30 @@
             <span class="nav-emoji" aria-hidden="true">💸</span>
             <span>Vendas</span>
           </button>
+          <button data-view="clientes-futuros" class="nav-btn">
+            <span class="nav-ico" aria-hidden="true"></span>
+            <span class="nav-emoji" aria-hidden="true">⏳</span>
+            <span>Clientes futuros</span>
+          </button>
           <button data-view="todas-vendas" class="nav-btn">
             <span class="nav-ico" aria-hidden="true"></span>
             <span class="nav-emoji" aria-hidden="true">🧾</span>
             <span>Todas as vendas</span>
           </button>
-          <button data-view="investir" class="nav-btn">
+          <button data-view="clientes" class="nav-btn">
             <span class="nav-ico" aria-hidden="true"></span>
-            <span class="nav-emoji" aria-hidden="true">📣</span>
-            <span>Investir</span>
+            <span class="nav-emoji" aria-hidden="true">👥</span>
+            <span>Clientes</span>
           </button>
           <button data-view="historico" class="nav-btn">
             <span class="nav-ico" aria-hidden="true"></span>
             <span class="nav-emoji" aria-hidden="true">🕒</span>
             <span>Histórico</span>
           </button>
-          <button data-view="clientes" class="nav-btn">
+          <button data-view="investir" class="nav-btn">
             <span class="nav-ico" aria-hidden="true"></span>
-            <span class="nav-emoji" aria-hidden="true">👥</span>
-            <span>Clientes</span>
+            <span class="nav-emoji" aria-hidden="true">📣</span>
+            <span>Investir</span>
           </button>
         </nav>
 
@@ -263,6 +268,44 @@
       </div>
     </section>
 
+    <!-- CLIENTES FUTUROS -->
+    <section id="view-clientes-futuros" class="view">
+      <div class="layout-split">
+        <div class="card">
+          <h3>Novo pagamento futuro</h3>
+          <div id="future-error" class="error hidden" role="alert" aria-live="polite"></div>
+          <form id="form-future" class="form">
+            <div class="field">
+              <span class="label">Nome do cliente</span>
+              <input id="future-name" class="input" type="text" list="clientes-futuros-datalist" placeholder="Ex.: João Manuel Silva" autocomplete="off" />
+              <datalist id="clientes-futuros-datalist"></datalist>
+            </div>
+            <div class="field">
+              <span class="label">Data prevista de pagamento</span>
+              <input id="future-date" class="input" type="date" />
+              <span class="help">A cor do estado é automática (em dia / vence hoje / atrasado).</span>
+            </div>
+            <div class="row">
+              <button class="btn primary" type="submit">Guardar</button>
+              <button class="btn ghost" type="button" id="future-clear">Limpar</button>
+            </div>
+          </form>
+        </div>
+        <div class="card">
+          <div class="panel-head">
+            <div>
+              <h3 class="panel-title">Clientes futuros</h3>
+              <p class="panel-subtitle">Pagamentos agendados</p>
+            </div>
+            <div class="row">
+              <input id="future-search" class="input" placeholder="Pesquisar…" />
+            </div>
+          </div>
+          <div id="future-table" class="table future"></div>
+        </div>
+      </div>
+    </section>
+
     <!-- TODAS AS VENDAS -->
     <section id="view-todas-vendas" class="view">
       <div class="panel">
@@ -443,8 +486,8 @@
             </div>
           </div>
 
-          <div class="row" style="margin-bottom: 12px;">
-            <div class="field" style="min-width: 280px;">
+          <div class="row pipeline-add">
+            <div class="field">
               <span class="label">Adicionar cliente (nome completo)</span>
               <input id="pipeline-add-name" class="input" type="text" placeholder="Ex.: João Manuel Silva" />
             </div>

@@ -203,6 +203,7 @@ button{cursor:pointer}
 }
 .nav-btn[data-view="dashboard"] .nav-emoji{background:rgba(79,70,229,.12); border-color:rgba(79,70,229,.22)}
 .nav-btn[data-view="vendas"] .nav-emoji{background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.22)}
+.nav-btn[data-view="clientes-futuros"] .nav-emoji{background:rgba(168,85,247,.12); border-color:rgba(168,85,247,.22)}
 .nav-btn[data-view="todas-vendas"] .nav-emoji{background:rgba(245,158,11,.14); border-color:rgba(245,158,11,.22)}
 .nav-btn[data-view="investir"] .nav-emoji{background:rgba(236,72,153,.12); border-color:rgba(236,72,153,.22)}
 .nav-btn[data-view="historico"] .nav-emoji{background:rgba(99,102,241,.10); border-color:rgba(99,102,241,.20)}
@@ -396,6 +397,7 @@ button{cursor:pointer}
 .is-locked .container{position:relative}
 .is-locked #view-dashboard,
 .is-locked #view-vendas,
+.is-locked #view-clientes-futuros,
 .is-locked #view-todas-vendas,
 .is-locked #view-investir,
 .is-locked #view-historico,
@@ -531,6 +533,9 @@ body:not(.theme-light) input[type="date"].input::-webkit-calendar-picker-indicat
   padding:12px 12px;
   border-top:1px solid var(--border);
 }
+.table.future .trow{
+  grid-template-columns: minmax(240px, 1.4fr) 170px 140px 160px;
+}
 .table.clients .trow{
   grid-template-columns: minmax(200px, 1.4fr) 160px 150px 90px 110px 140px;
 }
@@ -595,6 +600,23 @@ body:not(.theme-light) input[type="date"].input::-webkit-calendar-picker-indicat
   background:rgba(15,23,42,.02);
   color:var(--text);
 }
+.badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background:rgba(15,23,42,.02);
+  color:var(--text);
+  font-size:12px;
+  font-weight:750;
+  letter-spacing:.1px;
+  white-space:nowrap;
+}
+.badge.ok{background:rgba(34,197,94,.10); border-color:rgba(34,197,94,.22)}
+.badge.due{background:rgba(245,158,11,.12); border-color:rgba(245,158,11,.24)}
+.badge.late{background:rgba(225,29,72,.10); border-color:rgba(225,29,72,.22)}
 .link-btn{
   border:0;
   background:transparent;
@@ -704,6 +726,8 @@ body:not(.theme-light) input[type="date"].input::-webkit-calendar-picker-indicat
   gap:10px;
 }
 .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+.row.pipeline-add{margin-bottom:12px}
+.row.pipeline-add .field{min-width:280px; flex:1 1 280px}
 .filters{
   display:grid;
   grid-template-columns:repeat(6, minmax(0, 1fr));

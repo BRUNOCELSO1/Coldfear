@@ -55,6 +55,7 @@ const SELLERS = [
 const VIEW_META = {
   dashboard: { title: 'Dashboard' },
   vendas: { title: 'Vendas' },
+  'clientes-futuros': { title: 'Clientes futuros' },
   'todas-vendas': { title: 'Todas as vendas' },
   investir: { title: 'Investir' },
   historico: { title: 'Histórico' },
@@ -90,10 +91,11 @@ function validatePhone(phone){
   return { ok:true, value: raw }
 }
 function normalizeDB(next){
-  if(!next || typeof next !== 'object') return { customers: [], sales: [], investments: [] }
+  if(!next || typeof next !== 'object') return { customers: [], sales: [], investments: [], futureClients: [] }
   next.customers = Array.isArray(next.customers) ? next.customers : []
   next.sales = Array.isArray(next.sales) ? next.sales : []
   next.investments = Array.isArray(next.investments) ? next.investments : []
+  next.futureClients = Array.isArray(next.futureClients) ? next.futureClients : []
 
   next.customers = next.customers.map(c=>{
     const id = c.id || crypto.randomUUID()
@@ -135,9 +137,16 @@ function normalizeDB(next){
     createdAt: i.createdAt || new Date().toISOString()
   }))
 
+  next.futureClients = next.futureClients.map(x=>({
+    id: x.id || crypto.randomUUID(),
+    name: String(x.name||'').trim() || 'Sem nome',
+    dueOn: String(x.dueOn||'').trim(),
+    createdAt: x.createdAt || new Date().toISOString()
+  })).filter(x=>x.dueOn)
+
   return next
 }
-let db = normalizeDB({ customers: [], sales: [], investments: [] })
+let db = normalizeDB({ customers: [], sales: [], investments: [], futureClients: [] })
 
 try{ initTheme() }catch{}
 
@@ -461,7 +470,9 @@ function openSaleEditModal(saleId){
 
 const AUTH_KEY = 'cf_auth_v1'
 const SELLER_PREF_KEY = 'cf_seller_pref_v1'
+const ROLE_KEY = 'cf_role_v1'
 let sellerSelectedId = ''
+let currentRole = ''
 function isAuthed(){
   try{ return sessionStorage.getItem(AUTH_KEY) === '1' }catch{ return false }
 }
@@ -470,6 +481,20 @@ function setAuthed(value){
     if(value) sessionStorage.setItem(AUTH_KEY, '1')
     else sessionStorage.removeItem(AUTH_KEY)
   }catch{}
+}
+function getRole(){
+  try{ return sessionStorage.getItem(ROLE_KEY) || '' }catch{ return '' }
+}
+function setRole(value){
+  const v = String(value||'').trim()
+  currentRole = v
+  try{
+    if(v) sessionStorage.setItem(ROLE_KEY, v)
+    else sessionStorage.removeItem(ROLE_KEY)
+  }catch{}
+}
+function isAdmin(){
+  return (currentRole || getRole()) === 'admin'
 }
 function getSellerPref(){
   try{ return localStorage.getItem(SELLER_PREF_KEY) || '' }catch{ return '' }
@@ -684,7 +709,172 @@ async function pullRemoteDB(){
   db = normalizeDB({
     customers: (customers || []).map(mapCustomerRow),
     sales: (sales || []).map(mapSaleRow),
-    investments: (investments || []).map(mapInvestmentRow)
+    investments: (investments || []).map(mapInvestmentRow),
+    futureClients: db.futureClients
+  })
+}
+
+let futureClientsRemoteReady = false
+async function pullFutureClients(){
+  if(storageMode !== 'supabase' || !supabase) return
+  const { data, error } = await supabase.from('future_clients').select('*').limit(5000)
+  if(error) throw error
+  futureClientsRemoteReady = true
+  db.futureClients = (data || []).map(r=>({
+    id: r.id,
+    name: String(r.name||'').trim() || 'Sem nome',
+    dueOn: String(r.due_on||'').trim(),
+    createdAt: r.created_at || new Date().toISOString()
+  })).filter(x=>x.dueOn)
+}
+
+function futureStatusOf(item){
+  const t = todayISO()
+  const d = String(item?.dueOn||'').trim()
+  if(!d) return { label:'—', cls:'' }
+  if(d < t) return { label:'Atrasado', cls:'late' }
+  if(d === t) return { label:'Vence hoje', cls:'due' }
+  return { label:'Em dia', cls:'ok' }
+}
+
+function populateFutureDatalist(){
+  const dl = qs('#clientes-futuros-datalist')
+  if(!dl) return
+  const names = [...new Set(db.customers.map(c=>c.name).filter(Boolean))].slice(0, 300)
+  dl.innerHTML = names.map(n=>`<option value="${escapeHtml(n)}"></option>`).join('')
+}
+
+function renderFutureClients(){
+  const el = qs('#future-table')
+  if(!el) return
+  const q = String(qs('#future-search')?.value || '').trim().toLowerCase()
+  const items = db.futureClients
+    .filter(x=> !q || String(x.name||'').toLowerCase().includes(q))
+    .slice()
+    .sort((a,b)=> String(a.dueOn).localeCompare(String(b.dueOn)) || String(a.name).localeCompare(String(b.name)))
+
+  if(!items.length){
+    el.innerHTML = `<div class="empty">Sem clientes futuros.</div>`
+    return
+  }
+
+  el.innerHTML = [
+    `<div class="trow thead">
+      <div class="tcell">Cliente</div>
+      <div class="tcell">Data</div>
+      <div class="tcell">Estado</div>
+      <div class="tcell tactions">Ações</div>
+    </div>`,
+    ...items.map(x=>{
+      const st = futureStatusOf(x)
+      return `<div class="trow">
+        <div class="tcell">
+          <div class="tmain">${escapeHtml(x.name)}</div>
+        </div>
+        <div class="tcell">${escapeHtml(fmtDateOnlyFromYMD(x.dueOn))}</div>
+        <div class="tcell"><span class="badge ${st.cls}">${st.label}</span></div>
+        <div class="tcell tactions">
+          <button class="btn sm" type="button" data-future-edit="${escapeHtml(x.id)}">Editar</button>
+          <button class="btn sm danger" type="button" data-future-del="${escapeHtml(x.id)}">Remover</button>
+        </div>
+      </div>`
+    })
+  ].join('')
+}
+
+async function addFutureClient({ name, dueOn }){
+  const v = validateFullName(name)
+  if(!v.ok) throw new Error(v.message)
+  const d = String(dueOn||'').trim()
+  if(!d) throw new Error('Data prevista é obrigatória.')
+  const item = { id: crypto.randomUUID(), name: v.value, dueOn: d, createdAt: new Date().toISOString() }
+  db.futureClients.push(item)
+  if(storageMode === 'supabase' && supabase){
+    if(!futureClientsRemoteReady) throw new Error('Tabela future_clients não está configurada no Supabase.')
+    const { error } = await supabase.from('future_clients').insert({
+      id: item.id,
+      name: item.name,
+      due_on: item.dueOn,
+      created_at: item.createdAt
+    })
+    if(error) throw error
+  }else{
+    saveDB(db)
+  }
+  return item
+}
+
+async function updateFutureClient(id, patch){
+  const item = db.futureClients.find(x=>x.id===id)
+  if(!item) return null
+  if(patch?.name !== undefined){
+    const v = validateFullName(patch.name)
+    if(!v.ok) throw new Error(v.message)
+    item.name = v.value
+  }
+  if(patch?.dueOn !== undefined){
+    const d = String(patch.dueOn||'').trim()
+    if(!d) throw new Error('Data prevista é obrigatória.')
+    item.dueOn = d
+  }
+  if(storageMode === 'supabase' && supabase){
+    if(!futureClientsRemoteReady) throw new Error('Tabela future_clients não está configurada no Supabase.')
+    const { error } = await supabase.from('future_clients').update({ name: item.name, due_on: item.dueOn }).eq('id', id)
+    if(error) throw error
+  }else{
+    saveDB(db)
+  }
+  return item
+}
+
+async function deleteFutureClient(id){
+  db.futureClients = db.futureClients.filter(x=>x.id!==id)
+  if(storageMode === 'supabase' && supabase){
+    if(!futureClientsRemoteReady) throw new Error('Tabela future_clients não está configurada no Supabase.')
+    const { error } = await supabase.from('future_clients').delete().eq('id', id)
+    if(error) throw error
+  }else{
+    saveDB(db)
+  }
+}
+
+function openFutureEditModal(id){
+  const item = db.futureClients.find(x=>x.id===id)
+  if(!item) return
+  openModal({
+    title: 'Editar pagamento futuro',
+    subtitle: item.name,
+    bodyHtml: `
+      <div id="future-edit-error" class="error hidden" role="alert" aria-live="polite"></div>
+      <div class="form">
+        <div class="field">
+          <span class="label">Nome do cliente</span>
+          <input id="future-edit-name" class="input" type="text" value="${escapeHtml(item.name)}" />
+        </div>
+        <div class="field">
+          <span class="label">Data prevista de pagamento</span>
+          <input id="future-edit-date" class="input" type="date" value="${escapeHtml(item.dueOn)}" />
+        </div>
+        <div class="row">
+          <button id="future-edit-save" class="btn primary" type="button">Guardar</button>
+          <button id="future-edit-cancel" class="btn ghost" type="button">Cancelar</button>
+        </div>
+      </div>
+    `
+  })
+  qs('#future-edit-cancel')?.addEventListener('click', closeModal)
+  qs('#future-edit-save')?.addEventListener('click', async ()=>{
+    setError('#future-edit-error', '')
+    try{
+      await updateFutureClient(id, {
+        name: qs('#future-edit-name')?.value || '',
+        dueOn: qs('#future-edit-date')?.value || ''
+      })
+      closeModal()
+      renderFutureClients()
+    }catch(err){
+      setError('#future-edit-error', err?.message || 'Erro ao atualizar.')
+    }
   })
 }
 
@@ -742,6 +932,10 @@ function navTo(view){
   })
   if(view==='historico') renderHistory()
   if(view==='todas-vendas') renderAllSales()
+  if(view==='clientes-futuros'){
+    populateFutureDatalist()
+    renderFutureClients()
+  }
   if(view==='vendas'){
     populateClientesDatalist()
     populateSociosSelect()
@@ -771,11 +965,29 @@ function applyGlobalSearch(query){
   }
 }
 
+function applyAccessUI(){
+  const role = currentRole || getRole()
+  currentRole = role
+  const isOp = role === 'operador'
+  const hideViews = isOp ? ['investir','historico'] : []
+  qsa('.nav-btn').forEach(b=>{
+    const v = b.dataset.view
+    b.classList.toggle('hidden', hideViews.includes(v))
+  })
+  qs('#novo-invest-fast')?.classList.toggle('hidden', isOp)
+  if(!isAdmin() && (currentView === 'investir' || currentView === 'historico')){
+    navTo('vendas')
+  }
+}
+
 qs('#btn-refresh')?.addEventListener('click', async ()=>{
   try{
     if(storageMode === 'supabase'){
       const session = await getRemoteSession()
-      if(session) await pullRemoteDB()
+      if(session){
+        await pullRemoteDB()
+        try{ await pullFutureClients() }catch{}
+      }
     }
   }catch{}
   refreshAll()
@@ -787,12 +999,54 @@ qs('#btn-logout')?.addEventListener('click', async ()=>{
   try{ await remoteSignOut() }catch{}
   try{ stopRemoteSync() }catch{}
   setAuthed(false)
+  setRole('')
+  applyAccessUI()
   setLocked(true)
 })
 
 qs('#shortcut-venda')?.addEventListener('click', ()=>{
   navTo('vendas')
   qs('#venda-cliente-nome')?.focus()
+})
+
+qs('#future-search')?.addEventListener('input', renderFutureClients)
+qs('#future-clear')?.addEventListener('click', ()=>{
+  setError('#future-error', '')
+  const a = qs('#future-name'); if(a) a.value = ''
+  const b = qs('#future-date'); if(b) b.value = ''
+})
+qs('#form-future')?.addEventListener('submit', async e=>{
+  e.preventDefault()
+  setError('#future-error', '')
+  try{
+    await addFutureClient({
+      name: qs('#future-name')?.value || '',
+      dueOn: qs('#future-date')?.value || ''
+    })
+    const a = qs('#future-name'); if(a) a.value = ''
+    const b = qs('#future-date'); if(b) b.value = ''
+    populateFutureDatalist()
+    renderFutureClients()
+  }catch(err){
+    setError('#future-error', err?.message || 'Erro ao guardar.')
+  }
+})
+qs('#future-table')?.addEventListener('click', async e=>{
+  const del = e.target?.closest?.('[data-future-del]')?.dataset?.futureDel
+  if(del){
+    const ok = window.confirm('Remover este pagamento futuro?')
+    if(!ok) return
+    setError('#future-error', '')
+    try{
+      await deleteFutureClient(del)
+      renderFutureClients()
+    }catch(err){
+      setError('#future-error', err?.message || 'Erro ao remover.')
+    }
+    return
+  }
+  const edit = e.target?.closest?.('[data-future-edit]')?.dataset?.futureEdit
+  if(edit) openFutureEditModal(edit)
 })
 
 qs('#global-search')?.addEventListener('keydown', e=>{
@@ -969,6 +1223,7 @@ async function updateCustomerPhone(customerId, nextPhone){
   }
 }
 async function deleteSale(id){
+  if(!isAdmin()) throw new Error('Sem permissão.')
   db.sales = db.sales.filter(x=>x.id!==id)
   if(storageMode === 'supabase' && supabase){
     const { error } = await supabase.from('sales').delete().eq('id', id)
@@ -978,6 +1233,7 @@ async function deleteSale(id){
   }
 }
 async function deleteInvestment(id){
+  if(!isAdmin()) throw new Error('Sem permissão.')
   db.investments = db.investments.filter(x=>x.id!==id)
   if(storageMode === 'supabase' && supabase){
     const { error } = await supabase.from('investments').delete().eq('id', id)
@@ -987,6 +1243,7 @@ async function deleteInvestment(id){
   }
 }
 async function deleteCustomerAndSales(customerId){
+  if(!isAdmin()) throw new Error('Sem permissão.')
   const saleIds = db.sales.filter(s=>s.customerId===customerId).map(s=>s.id)
   db.sales = db.sales.filter(s=>s.customerId!==customerId)
   db.customers = db.customers.filter(c=>c.id!==customerId)
@@ -1005,8 +1262,8 @@ async function deleteCustomerAndSales(customerId){
 function computeMetrics(range){
   const from = range.from ? new Date(range.from) : new Date(Date.now()-30*86400000)
   const to = range.to ? new Date(range.to) : new Date()
-  const sales = db.sales.filter(s => new Date(s.occurredAt) >= from && new Date(s.occurredAt) <= to)
-  const investments = db.investments.filter(i => new Date(i.occurredOn) >= from && new Date(i.occurredOn) <= to)
+  const sales = db.sales.filter(s => new Date(s.occurredAt) >= from && new Date(s.occurredAt) < to)
+  const investments = db.investments.filter(i => dateFromYMD(i.occurredOn) >= from && dateFromYMD(i.occurredOn) < to)
   const totalSold = sales.reduce((a,b)=>a+b.amount,0)
   const numSales = sales.length
   const ticket = numSales>0 ? totalSold/numSales : 0
@@ -1035,12 +1292,26 @@ function readPeriod(){
   }else{
     const f = qs('#from-date').value
     const t = qs('#to-date').value
-    if(f) from = new Date(f)
-    if(t) to = new Date(t)
-    if(!to) to = new Date()
+    if(f){
+      const d = dateFromYMD(f)
+      d.setHours(0,0,0,0)
+      from = d
+    }
+    if(t){
+      const d = dateFromYMD(t)
+      d.setDate(d.getDate()+1)
+      d.setHours(0,0,0,0)
+      to = d
+    }else{
+      to = new Date()
+    }
+    if(from && to && from.getTime() > to.getTime()){
+      const tmp = from; from = to; to = tmp
+    }
   }
   return { from, to }
 }
+
 
 function updateKPIs(){
   const { from, to } = readPeriod()
@@ -1057,7 +1328,7 @@ function updateKPIs(){
 let chart
 function renderChart(m){
   const maxDays = 120
-  const end = m?.to ? new Date(m.to) : new Date()
+  const end = m?.to ? new Date(new Date(m.to).getTime()-1) : new Date()
   let start = m?.from ? new Date(m.from) : new Date(Date.now()-29*86400000)
   start.setHours(12,0,0,0)
   end.setHours(12,0,0,0)
@@ -1744,8 +2015,10 @@ function renderLeadCard(customer){
 function refreshAll(opts={}){
   if(!opts.kanbanOnly){
     populateClientesDatalist()
+    populateFutureDatalist()
     renderClientes()
     renderVendas()
+    renderFutureClients()
     renderAllSales()
     renderInvestimentos()
     updateKPIs()
@@ -2266,6 +2539,12 @@ function boot(){
       const session = await getRemoteSession()
       const locked = !session
       setLocked(locked)
+      if(session){
+        const email = String(session?.user?.email || '').trim().toLowerCase()
+        const adminEmail = String(supabaseCfg?.loginEmail || '').trim().toLowerCase()
+        setRole(email && adminEmail && email === adminEmail ? 'admin' : 'operador')
+        applyAccessUI()
+      }
 
       const btn = qs('#login-submit')
       if(btn) btn.disabled = false
@@ -2276,10 +2555,15 @@ function boot(){
         const user = qs('#login-user')?.value || ''
         const pass = qs('#login-pass')?.value || ''
         try{
+          const resolved = resolveLoginEmail(user)
+          const adminEmail = String(supabaseCfg?.loginEmail || '').trim().toLowerCase()
+          setRole(String(resolved||'').trim().toLowerCase() === adminEmail ? 'admin' : 'operador')
+          applyAccessUI()
           await remoteSignIn(user, pass)
           await pullRemoteDB()
+          try{ await pullFutureClients() }catch{ setError('#future-error', 'Para sincronizar “Clientes futuros”, crie a tabela future_clients no Supabase.') }
           setLocked(false)
-          navTo('dashboard')
+          navTo(isAdmin() ? 'dashboard' : 'vendas')
           qs('#venda-data').value = todayISO()
           qs('#invest-data').value = todayISO()
           refreshAll()
@@ -2296,7 +2580,9 @@ function boot(){
       }
 
       await pullRemoteDB()
-      navTo('dashboard')
+      try{ await pullFutureClients() }catch{ setError('#future-error', 'Para sincronizar “Clientes futuros”, crie a tabela future_clients no Supabase.') }
+      applyAccessUI()
+      navTo(isAdmin() ? 'dashboard' : 'vendas')
       qs('#venda-data').value = todayISO()
       qs('#invest-data').value = todayISO()
       refreshAll()
@@ -2337,6 +2623,8 @@ function boot(){
         return
       }
       setAuthed(true)
+      setRole('admin')
+      applyAccessUI()
       setLocked(false)
       navTo('dashboard')
       qs('#venda-data').value = todayISO()
@@ -2350,6 +2638,8 @@ function boot(){
       return
     }
 
+    setRole('admin')
+    applyAccessUI()
     navTo('dashboard')
     qs('#venda-data').value = todayISO()
     qs('#invest-data').value = todayISO()
