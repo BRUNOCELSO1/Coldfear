@@ -190,24 +190,6 @@ button{cursor:pointer}
   transition:transform .12s ease, background .12s ease, border-color .12s ease;
   text-align:left;
 }
-.nav-emoji{
-  width:26px;
-  height:26px;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  border-radius:10px;
-  border:1px solid var(--border);
-  background:rgba(15,23,42,.02);
-  font-size:14px;
-}
-.nav-btn[data-view="dashboard"] .nav-emoji{background:rgba(79,70,229,.12); border-color:rgba(79,70,229,.22)}
-.nav-btn[data-view="vendas"] .nav-emoji{background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.22)}
-.nav-btn[data-view="clientes-futuros"] .nav-emoji{background:rgba(168,85,247,.12); border-color:rgba(168,85,247,.22)}
-.nav-btn[data-view="todas-vendas"] .nav-emoji{background:rgba(245,158,11,.14); border-color:rgba(245,158,11,.22)}
-.nav-btn[data-view="investir"] .nav-emoji{background:rgba(236,72,153,.12); border-color:rgba(236,72,153,.22)}
-.nav-btn[data-view="historico"] .nav-emoji{background:rgba(99,102,241,.10); border-color:rgba(99,102,241,.20)}
-.nav-btn[data-view="clientes"] .nav-emoji{background:rgba(14,165,233,.12); border-color:rgba(14,165,233,.22)}
 .side-nav .nav-btn:hover{background:rgba(79,70,229,.06); border-color:rgba(79,70,229,.16)}
 .side-nav .nav-btn:active{transform:translateY(1px)}
 .side-nav .nav-btn:focus-visible{outline:none; box-shadow:var(--focus)}
@@ -215,38 +197,6 @@ button{cursor:pointer}
   background:rgba(79,70,229,.14);
   border-color:rgba(79,70,229,.34);
 }
-.side-nav .nav-btn.active .nav-emoji{
-  border-color:rgba(79,70,229,.30);
-  background:rgba(79,70,229,.10);
-}
-.nav-ico{
-  width:30px;
-  height:30px;
-  border-radius:10px;
-  background:rgba(15,23,42,.03);
-  border:1px solid var(--border);
-  position:relative;
-  display:none;
-}
-.nav-ico::after{
-  content:"";
-  position:absolute;
-  inset:8px;
-  border-radius:6px;
-  background:linear-gradient(135deg, rgba(79,70,229,.95), rgba(56,189,248,.75));
-  opacity:.9;
-}
-.nav-btn[data-view="dashboard"] .nav-ico::after{background:linear-gradient(135deg, rgba(79,70,229,.95), rgba(56,189,248,.75))}
-.nav-btn[data-view="vendas"] .nav-ico::after{background:linear-gradient(135deg, rgba(34,197,94,.95), rgba(16,185,129,.75))}
-.nav-btn[data-view="todas-vendas"] .nav-ico::after{background:linear-gradient(135deg, rgba(245,158,11,.95), rgba(251,191,36,.75))}
-.nav-btn[data-view="investir"] .nav-ico::after{background:linear-gradient(135deg, rgba(236,72,153,.95), rgba(168,85,247,.75))}
-.nav-btn[data-view="historico"] .nav-ico::after{background:linear-gradient(135deg, rgba(148,163,184,.95), rgba(99,102,241,.75))}
-.nav-btn[data-view="clientes"] .nav-ico::after{background:linear-gradient(135deg, rgba(14,165,233,.95), rgba(59,130,246,.75))}
-.side-nav .nav-btn.active .nav-ico{
-  background:rgba(15,23,42,.05);
-  border-color:var(--borderStrong);
-}
-.side-nav .nav-btn.active .nav-ico::after{opacity:1}
 
 .sidebar-card{
   margin-top:auto;
