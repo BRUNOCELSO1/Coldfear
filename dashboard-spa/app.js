@@ -140,6 +140,7 @@ function normalizeDB(next){
   next.futureClients = next.futureClients.map(x=>({
     id: x.id || crypto.randomUUID(),
     name: String(x.name||'').trim() || 'Sem nome',
+    phone: String(x.phone||'').trim(),
     dueOn: String(x.dueOn||'').trim(),
     createdAt: x.createdAt || new Date().toISOString()
   })).filter(x=>x.dueOn)
@@ -723,6 +724,7 @@ async function pullFutureClients(){
   db.futureClients = (data || []).map(r=>({
     id: r.id,
     name: String(r.name||'').trim() || 'Sem nome',
+    phone: String(r.phone||'').trim(),
     dueOn: String(r.due_on||'').trim(),
     createdAt: r.created_at || new Date().toISOString()
   })).filter(x=>x.dueOn)
@@ -744,12 +746,57 @@ function populateFutureDatalist(){
   dl.innerHTML = names.map(n=>`<option value="${escapeHtml(n)}"></option>`).join('')
 }
 
+let futureSelectedId = ''
+function renderFutureDetail(){
+  const el = qs('#future-detail')
+  if(!el) return
+  const item = futureSelectedId ? db.futureClients.find(x=>x.id===futureSelectedId) : null
+  if(!item){
+    el.innerHTML = `<div class="empty">Selecione um cliente na lista.</div>`
+    return
+  }
+  const st = futureStatusOf(item)
+  const phoneRaw = String(item.phone || '').trim()
+  const phoneDigits = normalizePhone(phoneRaw)
+  const phoneHref = phoneDigits ? `tel:${phoneDigits}` : ''
+  const waHref = phoneDigits ? `https://wa.me/${phoneDigits}` : ''
+  el.innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-field">
+        <div class="detail-label">Cliente</div>
+        <div class="detail-value">${escapeHtml(item.name)}</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Telemóvel</div>
+        <div class="detail-value">${phoneRaw ? escapeHtml(phoneRaw) : '—'}</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Data prevista</div>
+        <div class="detail-value">${escapeHtml(fmtDateOnlyFromYMD(item.dueOn))}</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Estado</div>
+        <div class="detail-value"><span class="badge ${st.cls}">${st.label}</span></div>
+      </div>
+    </div>
+    <div class="row" style="justify-content:flex-end; margin-top:12px">
+      <button class="btn sm" type="button" data-future-edit="${escapeHtml(item.id)}">Editar</button>
+      <button class="btn sm danger" type="button" data-future-del="${escapeHtml(item.id)}">Remover</button>
+      ${phoneHref ? `<a class="btn sm" href="${escapeHtml(phoneHref)}">Ligar</a>` : ''}
+      ${waHref ? `<a class="btn sm" href="${escapeHtml(waHref)}" target="_blank" rel="noopener noreferrer">WhatsApp</a>` : ''}
+    </div>
+  `
+}
+
 function renderFutureClients(){
   const el = qs('#future-table')
   if(!el) return
   const q = String(qs('#future-search')?.value || '').trim().toLowerCase()
   const items = db.futureClients
-    .filter(x=> !q || String(x.name||'').toLowerCase().includes(q))
+    .filter(x=>{
+      if(!q) return true
+      return String(x.name||'').toLowerCase().includes(q) || String(x.phone||'').toLowerCase().includes(q)
+    })
     .slice()
     .sort((a,b)=> String(a.dueOn).localeCompare(String(b.dueOn)) || String(a.name).localeCompare(String(b.name)))
 
@@ -761,16 +808,19 @@ function renderFutureClients(){
   el.innerHTML = [
     `<div class="trow thead">
       <div class="tcell">Cliente</div>
+      <div class="tcell">Telemóvel</div>
       <div class="tcell">Data</div>
       <div class="tcell">Estado</div>
       <div class="tcell tactions">Ações</div>
     </div>`,
     ...items.map(x=>{
       const st = futureStatusOf(x)
-      return `<div class="trow">
+      const selected = x.id === futureSelectedId
+      return `<div class="trow clickable${selected ? ' selected' : ''}" data-future-open="${escapeHtml(x.id)}">
         <div class="tcell">
           <div class="tmain">${escapeHtml(x.name)}</div>
         </div>
+        <div class="tcell"><span class="tphone">${escapeHtml(String(x.phone||''))}</span></div>
         <div class="tcell">${escapeHtml(fmtDateOnlyFromYMD(x.dueOn))}</div>
         <div class="tcell"><span class="badge ${st.cls}">${st.label}</span></div>
         <div class="tcell tactions">
@@ -780,24 +830,35 @@ function renderFutureClients(){
       </div>`
     })
   ].join('')
+  if(futureSelectedId && !db.futureClients.some(x=>x.id===futureSelectedId)) futureSelectedId = ''
+  renderFutureDetail()
 }
 
-async function addFutureClient({ name, dueOn }){
+async function addFutureClient({ name, phone, dueOn }){
   const v = validateFullName(name)
   if(!v.ok) throw new Error(v.message)
+  const pv = validatePhone(phone)
+  if(!pv.ok) throw new Error(pv.message)
   const d = String(dueOn||'').trim()
   if(!d) throw new Error('Data prevista é obrigatória.')
-  const item = { id: crypto.randomUUID(), name: v.value, dueOn: d, createdAt: new Date().toISOString() }
+  const item = { id: crypto.randomUUID(), name: v.value, phone: pv.value, dueOn: d, createdAt: new Date().toISOString() }
   db.futureClients.push(item)
   if(storageMode === 'supabase' && supabase){
     if(!futureClientsRemoteReady) throw new Error('Tabela future_clients não está configurada no Supabase.')
     const { error } = await supabase.from('future_clients').insert({
       id: item.id,
       name: item.name,
+      phone: item.phone,
       due_on: item.dueOn,
       created_at: item.createdAt
     })
-    if(error) throw error
+    if(error){
+      const msg = String(error?.message || '')
+      if(msg.toLowerCase().includes('phone') && msg.toLowerCase().includes('does not exist')){
+        throw new Error('No Supabase, adicione a coluna phone na tabela future_clients.')
+      }
+      throw error
+    }
   }else{
     saveDB(db)
   }
@@ -812,6 +873,11 @@ async function updateFutureClient(id, patch){
     if(!v.ok) throw new Error(v.message)
     item.name = v.value
   }
+  if(patch?.phone !== undefined){
+    const pv = validatePhone(patch.phone)
+    if(!pv.ok) throw new Error(pv.message)
+    item.phone = pv.value
+  }
   if(patch?.dueOn !== undefined){
     const d = String(patch.dueOn||'').trim()
     if(!d) throw new Error('Data prevista é obrigatória.')
@@ -819,8 +885,14 @@ async function updateFutureClient(id, patch){
   }
   if(storageMode === 'supabase' && supabase){
     if(!futureClientsRemoteReady) throw new Error('Tabela future_clients não está configurada no Supabase.')
-    const { error } = await supabase.from('future_clients').update({ name: item.name, due_on: item.dueOn }).eq('id', id)
-    if(error) throw error
+    const { error } = await supabase.from('future_clients').update({ name: item.name, phone: item.phone, due_on: item.dueOn }).eq('id', id)
+    if(error){
+      const msg = String(error?.message || '')
+      if(msg.toLowerCase().includes('phone') && msg.toLowerCase().includes('does not exist')){
+        throw new Error('No Supabase, adicione a coluna phone na tabela future_clients.')
+      }
+      throw error
+    }
   }else{
     saveDB(db)
   }
@@ -852,6 +924,10 @@ function openFutureEditModal(id){
           <input id="future-edit-name" class="input" type="text" value="${escapeHtml(item.name)}" />
         </div>
         <div class="field">
+          <span class="label">Telemóvel</span>
+          <input id="future-edit-phone" class="input" type="tel" value="${escapeHtml(String(item.phone||''))}" />
+        </div>
+        <div class="field">
           <span class="label">Data prevista de pagamento</span>
           <input id="future-edit-date" class="input" type="date" value="${escapeHtml(item.dueOn)}" />
         </div>
@@ -868,6 +944,7 @@ function openFutureEditModal(id){
     try{
       await updateFutureClient(id, {
         name: qs('#future-edit-name')?.value || '',
+        phone: qs('#future-edit-phone')?.value || '',
         dueOn: qs('#future-edit-date')?.value || ''
       })
       closeModal()
@@ -1013,6 +1090,7 @@ qs('#future-search')?.addEventListener('input', renderFutureClients)
 qs('#future-clear')?.addEventListener('click', ()=>{
   setError('#future-error', '')
   const a = qs('#future-name'); if(a) a.value = ''
+  const p = qs('#future-phone'); if(p) p.value = ''
   const b = qs('#future-date'); if(b) b.value = ''
 })
 qs('#form-future')?.addEventListener('submit', async e=>{
@@ -1021,9 +1099,11 @@ qs('#form-future')?.addEventListener('submit', async e=>{
   try{
     await addFutureClient({
       name: qs('#future-name')?.value || '',
+      phone: qs('#future-phone')?.value || '',
       dueOn: qs('#future-date')?.value || ''
     })
     const a = qs('#future-name'); if(a) a.value = ''
+    const p = qs('#future-phone'); if(p) p.value = ''
     const b = qs('#future-date'); if(b) b.value = ''
     populateFutureDatalist()
     renderFutureClients()
@@ -1039,6 +1119,7 @@ qs('#future-table')?.addEventListener('click', async e=>{
     setError('#future-error', '')
     try{
       await deleteFutureClient(del)
+      if(futureSelectedId === del) futureSelectedId = ''
       renderFutureClients()
     }catch(err){
       setError('#future-error', err?.message || 'Erro ao remover.')
@@ -1046,7 +1127,15 @@ qs('#future-table')?.addEventListener('click', async e=>{
     return
   }
   const edit = e.target?.closest?.('[data-future-edit]')?.dataset?.futureEdit
-  if(edit) openFutureEditModal(edit)
+  if(edit){
+    openFutureEditModal(edit)
+    return
+  }
+  const open = e.target?.closest?.('[data-future-open]')?.dataset?.futureOpen
+  if(open){
+    futureSelectedId = open
+    renderFutureClients()
+  }
 })
 
 qs('#global-search')?.addEventListener('keydown', e=>{

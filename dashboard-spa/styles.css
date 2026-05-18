@@ -534,7 +534,7 @@ body:not(.theme-light) input[type="date"].input::-webkit-calendar-picker-indicat
   border-top:1px solid var(--border);
 }
 .table.future .trow{
-  grid-template-columns: minmax(240px, 1.4fr) 170px 140px 160px;
+  grid-template-columns: minmax(220px, 1.2fr) 170px 170px 140px 160px;
 }
 .table.clients .trow{
   grid-template-columns: minmax(200px, 1.4fr) 160px 150px 90px 110px 140px;
@@ -557,6 +557,7 @@ body:not(.theme-light) input[type="date"].input::-webkit-calendar-picker-indicat
 .tactions{display:flex; justify-content:flex-end}
 .trow.clickable{cursor:pointer; transition:background .12s ease}
 .trow.clickable:hover{background:rgba(79,70,229,.06)}
+.trow.selected{outline:2px solid rgba(79,70,229,.22); outline-offset:-2px; background:rgba(79,70,229,.04)}
 .empty{padding:18px; color:var(--muted2)}
 
 .list{display:grid; gap:10px}
@@ -710,6 +711,14 @@ body:not(.theme-light) input[type="date"].input::-webkit-calendar-picker-indicat
   align-items:start;
 }
 .layout-split > *{min-width:0}
+.future-right{
+  display:grid;
+  grid-template-columns:minmax(420px, 1.2fr) minmax(320px, .8fr);
+  gap:14px;
+  align-items:start;
+  min-width:0;
+}
+.future-right > *{min-width:0}
 .card{
   background:var(--card);
   border:1px solid var(--border);
@@ -904,4 +913,5 @@ body:not(.theme-light) input[type="date"].input::-webkit-calendar-picker-indicat
   .filters #all-sales-from,
   .filters #all-sales-to,
   .filters #all-sales-clear{grid-column:span 2; justify-self:stretch}
+  .future-right{grid-template-columns:1fr}
 }

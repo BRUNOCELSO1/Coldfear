@@ -281,6 +281,10 @@
               <datalist id="clientes-futuros-datalist"></datalist>
             </div>
             <div class="field">
+              <span class="label">Telemóvel</span>
+              <input id="future-phone" class="input" type="tel" placeholder="Ex.: 3519xxxxxxxx" />
+            </div>
+            <div class="field">
               <span class="label">Data prevista de pagamento</span>
               <input id="future-date" class="input" type="date" />
               <span class="help">A cor do estado é automática (agendado / contactar hoje / contactar).</span>
@@ -291,17 +295,30 @@
             </div>
           </form>
         </div>
-        <div class="card">
-          <div class="panel-head">
-            <div>
-              <h3 class="panel-title">Clientes futuros</h3>
-              <p class="panel-subtitle">Pagamentos agendados</p>
+        <div class="future-right">
+          <div class="card">
+            <div class="panel-head">
+              <div>
+                <h3 class="panel-title">Clientes futuros</h3>
+                <p class="panel-subtitle">Pagamentos agendados</p>
+              </div>
+              <div class="row">
+                <input id="future-search" class="input" placeholder="Pesquisar…" />
+              </div>
             </div>
-            <div class="row">
-              <input id="future-search" class="input" placeholder="Pesquisar…" />
+            <div id="future-table" class="table future"></div>
+          </div>
+          <div class="card">
+            <div class="panel-head">
+              <div>
+                <h3 class="panel-title">Detalhes</h3>
+                <p class="panel-subtitle">Clique num cliente para ver informações</p>
+              </div>
+            </div>
+            <div id="future-detail" class="detail-block">
+              <div class="empty">Selecione um cliente na lista.</div>
             </div>
           </div>
-          <div id="future-table" class="table future"></div>
         </div>
       </div>
     </section>
