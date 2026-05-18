@@ -558,6 +558,7 @@ body:not(.theme-light) input[type="date"].input::-webkit-calendar-picker-indicat
 .trow.clickable{cursor:pointer; transition:background .12s ease}
 .trow.clickable:hover{background:rgba(79,70,229,.06)}
 .trow.selected{outline:2px solid rgba(79,70,229,.22); outline-offset:-2px; background:rgba(79,70,229,.04)}
+.future-detail-actions{justify-content:flex-end; margin-top:12px; flex-wrap:wrap}
 .empty{padding:18px; color:var(--muted2)}
 
 .list{display:grid; gap:10px}

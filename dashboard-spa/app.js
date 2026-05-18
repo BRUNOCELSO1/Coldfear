@@ -779,7 +779,7 @@ function renderFutureDetail(){
         <div class="detail-value"><span class="badge ${st.cls}">${st.label}</span></div>
       </div>
     </div>
-    <div class="row" style="justify-content:flex-end; margin-top:12px">
+    <div class="row future-detail-actions">
       <button class="btn sm" type="button" data-future-edit="${escapeHtml(item.id)}">Editar</button>
       <button class="btn sm danger" type="button" data-future-del="${escapeHtml(item.id)}">Remover</button>
       ${phoneHref ? `<a class="btn sm" href="${escapeHtml(phoneHref)}">Ligar</a>` : ''}
