@@ -1004,11 +1004,30 @@ function setHeader(view){
   document.title = `${meta.title} — Vendas & Investimentos`
 }
 
+function scrollAppTop(){
+  const targets = [
+    qs('.app-shell'),
+    qs('.main'),
+    qs('.container'),
+    document.documentElement,
+    document.body
+  ].filter(Boolean)
+  targets.forEach(t=>{
+    try{
+      if(typeof t.scrollTo === 'function') t.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+      else t.scrollTop = 0
+    }catch{}
+    try{ t.scrollTop = 0 }catch{}
+  })
+  try{ window.scrollTo({ top: 0, left: 0, behavior: 'auto' }) }catch{ window.scrollTo(0,0) }
+}
+
 function navTo(view){
   currentView = view
   setHeader(view)
   qsa('.view').forEach(v=>v.classList.remove('visible'))
-  qs(`#view-${view}`).classList.add('visible')
+  const viewEl = qs(`#view-${view}`)
+  if(viewEl) viewEl.classList.add('visible')
   qsa('.nav-btn').forEach(b=>{
     const active = b.dataset.view===view
     b.classList.toggle('active', active)
@@ -1025,6 +1044,10 @@ function navTo(view){
     populateClientesDatalist()
     populateSociosSelect()
   }
+  try{ viewEl?.scrollIntoView({ block:'start', behavior:'auto' }) }catch{}
+  scrollAppTop()
+  requestAnimationFrame(scrollAppTop)
+  setTimeout(scrollAppTop, 0)
 }
 qsa('.nav-btn').forEach(b=>b.addEventListener('click', ()=>navTo(b.dataset.view)))
 
