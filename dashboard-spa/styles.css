@@ -128,13 +128,14 @@ button{cursor:pointer}
 .app-shell{
   width:min(1280px, 100%);
   min-height:min(860px, calc(100vh - 52px));
+  max-height:calc(100vh - 52px);
   background:var(--surface);
   border:1px solid var(--border);
   border-radius:18px;
   box-shadow:var(--shadow);
   display:grid;
   grid-template-columns:260px 1fr;
-  overflow:auto;
+  overflow:hidden;
   position:relative;
 }
 .app-shell::before{
@@ -154,6 +155,8 @@ button{cursor:pointer}
   display:flex;
   flex-direction:column;
   gap:16px;
+  overflow:auto;
+  min-height:0;
 }
 .sidebar-top{display:flex; align-items:center; justify-content:space-between}
 .brand{
@@ -217,6 +220,8 @@ button{cursor:pointer}
   display:flex;
   flex-direction:column;
   min-width:0;
+  overflow:hidden;
+  min-height:0;
 }
 .main-top{
   display:grid;
@@ -331,6 +336,9 @@ button{cursor:pointer}
   width:100%;
   margin:0 auto;
   padding:18px 4px 28px;
+  overflow:auto;
+  flex:1;
+  min-height:0;
 }
 .view{display:none; animation:fade .18s ease-out}
 .view.visible{display:block}
@@ -823,6 +831,7 @@ body:not(.theme-light) input[type="date"].input::-webkit-calendar-picker-indicat
   .app-shell{
     grid-template-columns:1fr;
     min-height:calc(100vh - 28px);
+    max-height:calc(100vh - 28px);
   }
   .sidebar{
     border-right:0;
