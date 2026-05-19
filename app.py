@@ -77,16 +77,16 @@ class AppHandler(SimpleHTTPRequestHandler):
         html = index_path.read_text(encoding="utf-8")
         for _id in ["kpi-bruno-vendido", "kpi-kenan-vendido", "kpi-jusepp-vendido"]:
             html = re.sub(
-                rf'<div\s+class="kpi"[^>]*>[\s\S]*?id="{re.escape(_id)}"[\s\S]*?</div>\s*',
+                rf'<div\s+class="kpi"[^>]*>(?:(?!<div\s+class="kpi").)*?id="{re.escape(_id)}"(?:(?!<div\s+class="kpi").)*?</div>\s*',
                 "",
                 html,
-                flags=re.I,
+                flags=re.I | re.S,
             )
         html = re.sub(
-            r'<div\s+class="kpi"[^>]*>[\s\S]*?<p[^>]*class="kpi-title"[^>]*>\s*Vendido\s*\([^<]*\)\s*</p>[\s\S]*?</div>\s*',
+            r'<div\s+class="kpi"[^>]*>(?:(?!<div\s+class="kpi").)*?<p[^>]*class="kpi-title"[^>]*>\s*Vendido\s*\([^<]*\)\s*</p>(?:(?!<div\s+class="kpi").)*?</div>\s*',
             "",
             html,
-            flags=re.I,
+            flags=re.I | re.S,
         )
         html = re.sub(
             r"\./styles\.css(?:\?v=[^\"']+)?",
