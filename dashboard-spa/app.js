@@ -1358,69 +1358,17 @@ function computeMetrics(range){
   const ticket = numSales>0 ? totalSold/numSales : 0
   const totalInvested = investments.reduce((a,b)=>a+b.amount,0)
   const profit = totalSold - totalInvested
-  const brunoSales = sales.filter(isBrunoSale)
-  const brunoTotal = brunoSales.reduce((a,b)=>a+Number(b.amount||0),0)
   const roi = totalInvested>0 ? ((totalSold-totalInvested)/totalInvested)*100 : null
-  return { from, to, totalSold, numSales, ticket, totalInvested, profit, brunoTotal, brunoSales, roi, sales, investments }
+  return { from, to, totalSold, numSales, ticket, totalInvested, profit, roi, sales, investments }
 }
 
-function isBrunoSale(s){
-  if(!s) return false
-  if(String(s.sellerId||'') === 'bruno') return true
-  const needle = /(?:IBAN|MBWAY)\s*DO\s*BRUNO/i
-  return needle.test(String(s.paymentMethod||'')) || needle.test(String(s.notes||''))
-}
-
-function openBrunoSalesModal(){
-  const rowsAll = db.sales.filter(isBrunoSale)
-  const totalAll = rowsAll.reduce((a,b)=>a+Number(b.amount||0),0)
-  const rows = rowsAll
-    .slice()
-    .sort((a,b)=> String(b.occurredAt).localeCompare(String(a.occurredAt)))
-    .slice(0, 200)
-
-  const bodyHtml = rows.length ? `
-    <div class="detail-block">
-      <div class="detail-grid">
-        <div class="detail-field">
-          <div class="detail-label">Total</div>
-          <div class="detail-value">${fmtMoney(totalAll)}</div>
-        </div>
-        <div class="detail-field">
-          <div class="detail-label">Vendas</div>
-          <div class="detail-value">${rowsAll.length}</div>
-        </div>
-      </div>
-    </div>
-    <div class="table sales">
-      <div class="trow thead">
-        <div class="tcell">Data</div>
-        <div class="tcell">Cliente</div>
-        <div class="tcell">Valor</div>
-        <div class="tcell">Detalhes</div>
-      </div>
-      ${rows.map(s=>{
-        const c = db.customers.find(x=>x.id===s.customerId) || { name:'—' }
-        const detail = [s.paymentMethod||'', s.notes||''].filter(Boolean).join(' · ')
-        return `<div class="trow" data-open="${escapeHtml(s.id)}">
-          <div class="tcell">${escapeHtml(fmtDateTime(s.occurredAt))}</div>
-          <div class="tcell">${escapeHtml(c.name || '—')}</div>
-          <div class="tcell tnum"><strong>${fmtMoney(s.amount)}</strong></div>
-          <div class="tcell"><span class="tmuted">${escapeHtml(detail || '—')}</span></div>
-        </div>`
-      }).join('')}
-    </div>
-  ` : `<div class="empty">Sem vendas para Bruno no período selecionado.</div>`
-
-  openModal({
-    title: 'Vendido (Bruno)',
-    subtitle: 'Todo o histórico · Fluxo Bruno + “IBAN/MBWAY do Bruno”',
-    bodyHtml
+function stripSellerKPIs(){
+  const ids = ['kpi-bruno-vendido', 'kpi-kenan-vendido', 'kpi-jusepp-vendido']
+  ids.forEach(id => qs(`#${id}`)?.closest('.kpi')?.remove())
+  qsa('.kpi .kpi-title').forEach(t=>{
+    const s = String(t?.textContent || '').trim()
+    if(/^vendido\s*\(/i.test(s)) t.closest('.kpi')?.remove()
   })
-  qs('#modal-body')?.addEventListener('click', e=>{
-    const id = e.target?.closest?.('[data-open]')?.dataset?.open
-    if(id) openSaleModal(id)
-  }, { once:true })
 }
 
 function readPeriod(){
@@ -1473,12 +1421,8 @@ function updateKPIs(){
   qs('#kpi-total-investido').textContent = fmtMoney(m.totalInvested)
   const lucroEl = qs('#kpi-lucro')
   if(lucroEl) lucroEl.textContent = fmtMoney(m.profit)
-  const brunoEl = qs('#kpi-bruno-vendido')
-  if(brunoEl){
-    const totalAll = db.sales.filter(isBrunoSale).reduce((a,b)=>a+Number(b.amount||0),0)
-    brunoEl.textContent = fmtMoney(totalAll || 0)
-  }
   qs('#kpi-roi').textContent = m.roi===null ? '—' : `${m.roi.toFixed(1)}%`
+  stripSellerKPIs()
   renderChart(m)
   renderRecent(m)
 }
@@ -2677,11 +2621,11 @@ qs('#all-sales-clear')?.addEventListener('click', ()=>{
 
 qs('#salesChart')?.addEventListener('click', openAllSalesFromDashboard)
 ;(qs('#kpi-total-vendido')?.closest('.kpi'))?.addEventListener('click', openAllSalesFromDashboard)
-;(qs('#kpi-bruno-vendido')?.closest('.kpi'))?.addEventListener('click', openBrunoSalesModal)
 
 function boot(){
   ;(async ()=>{
     await initStorage()
+    stripSellerKPIs()
 
     if(storageMode === 'supabase_required'){
       setLocked(true)
