@@ -52,6 +52,14 @@ const SELLERS = [
   { id: 'kenan', label: 'Fluxo Kenan' }
 ]
 
+function investmentPlatformLabel(platform){
+  const p = String(platform || '').trim().toUpperCase()
+  if(p === 'FACEBOOK') return 'Facebook'
+  if(p === 'CHIPS') return 'CHIP'
+  if(p === 'OUTRA') return 'Outra'
+  return String(platform || '').trim() || '—'
+}
+
 const VIEW_META = {
   dashboard: { title: 'Dashboard' },
   vendas: { title: 'Vendas' },
@@ -1862,7 +1870,7 @@ function renderInvestimentos(){
     div.className='item'
     div.innerHTML = `
       <div>
-        <div><strong>${fmtMoney(i.amount)}</strong> <span class="chip">${i.platform}</span></div>
+        <div><strong>${fmtMoney(i.amount)}</strong> <span class="chip">${investmentPlatformLabel(i.platform)}</span></div>
         <div class="meta"><span>${i.campaign||'—'}</span><span>${fmtDateOnlyFromYMD(i.occurredOn)}</span></div>
       </div>
       <div class="row"><button data-del="${i.id}" class="btn danger">Remover</button></div>
@@ -2256,6 +2264,19 @@ qs('#venda-limpar').addEventListener('click', ()=>{
   setError('#venda-error', '')
 })
 
+function updateInvestPlatformUI(){
+  const platform = qs('#invest-plataforma')?.value
+  const wrap = qs('#invest-chips-wrap')
+  if(!wrap) return
+  if(platform === 'CHIPS') wrap.classList.remove('hidden')
+  else{
+    wrap.classList.add('hidden')
+    const qty = qs('#invest-chips-qty')
+    if(qty) qty.value = ''
+  }
+}
+qs('#invest-plataforma')?.addEventListener('change', updateInvestPlatformUI)
+
 qs('#form-invest').addEventListener('submit', async e=>{
   e.preventDefault()
   setError('#invest-error', '')
@@ -2263,7 +2284,14 @@ qs('#form-invest').addEventListener('submit', async e=>{
   const campaign = qs('#invest-campanha').value.trim()
   const occurredOn = qs('#invest-data').value || todayISO()
   const amount = Number(qs('#invest-valor').value||0)
-  const notes = qs('#invest-notas').value.trim()
+  const qty = Number(qs('#invest-chips-qty')?.value || 0)
+  const notesRaw = qs('#invest-notas').value.trim()
+  const notes = platform === 'CHIPS' && qty > 0 ? `CHIP: ${Math.trunc(qty)}${notesRaw ? ` — ${notesRaw}` : ''}` : notesRaw
+
+  if(platform === 'CHIPS' && (!Number.isFinite(qty) || qty <= 0)){
+    setError('#invest-error', 'Indique a quantidade de chips.')
+    return
+  }
 
   if(amount<=0){
     setError('#invest-error', 'Montante do investimento deve ser maior que 0.')
@@ -2274,6 +2302,7 @@ qs('#form-invest').addEventListener('submit', async e=>{
     await addInvestment({ platform, campaign, occurredOn, amount, notes })
     e.target.reset()
     qs('#invest-data').value = todayISO()
+    updateInvestPlatformUI()
     refreshAll()
   }catch(err){
     setError('#invest-error', err?.message || 'Erro ao guardar investimento.')
@@ -2283,6 +2312,7 @@ qs('#form-invest').addEventListener('submit', async e=>{
 qs('#invest-limpar').addEventListener('click', ()=>{
   qs('#form-invest').reset()
   qs('#invest-data').value = todayISO()
+  updateInvestPlatformUI()
   setError('#invest-error', '')
 })
 
@@ -2457,10 +2487,10 @@ function renderHistory(){
       }else{
         div.innerHTML = `
           <div>
-            <div><strong>Investimento</strong> <span class="chip">${fmtMoney(x.inv.amount)}</span> <span class="chip">Ads</span></div>
+            <div><strong>Investimento</strong> <span class="chip">${fmtMoney(x.inv.amount)}</span> <span class="chip">${investmentPlatformLabel(x.inv.platform)}</span></div>
             <div class="meta"><span>${x.inv.campaign||'—'}</span><span>${fmtDateOnlyFromYMD(x.inv.occurredOn)}</span></div>
           </div>
-          <div class="meta"><span class="chip">${x.inv.platform}</span></div>
+          <div class="meta"></div>
         `
       }
       body.appendChild(div)
@@ -2626,6 +2656,7 @@ function boot(){
   ;(async ()=>{
     await initStorage()
     stripSellerKPIs()
+    updateInvestPlatformUI()
 
     if(storageMode === 'supabase_required'){
       setLocked(true)
