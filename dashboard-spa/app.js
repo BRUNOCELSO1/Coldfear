@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm'
 
-const APP_BUILD = 'build-20260516-1'
+const APP_BUILD = (document.getElementById('build-id')?.textContent || '').trim() || 'build-local'
 const PT = new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' })
 const TZ = 'Europe/Lisbon'
 const qs = (s, el=document) => el.querySelector(s)
