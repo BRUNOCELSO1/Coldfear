@@ -482,6 +482,7 @@ const SELLER_PREF_KEY = 'cf_seller_pref_v1'
 const ROLE_KEY = 'cf_role_v1'
 let sellerSelectedId = ''
 let currentRole = ''
+let clientesDatalistValueToId = new Map()
 function isAuthed(){
   try{ return sessionStorage.getItem(AUTH_KEY) === '1' }catch{ return false }
 }
@@ -1619,19 +1620,19 @@ function renderRecent(m){
 function populateClientesDatalist(){
   const dl = qs('#clientes-datalist')
   if(!dl) return
-  const seen = new Set()
+  clientesDatalistValueToId = new Map()
   const options = db.customers
     .slice()
     .sort((a,b)=> (a.name||'').localeCompare(b.name||''))
-    .map(c=>String(c.name||'').trim())
-    .filter(name=>{
-      if(!name) return false
-      const key = name.toLowerCase()
-      if(seen.has(key)) return false
-      seen.add(key)
-      return true
+    .map(c=>{
+      const name = String(c.name||'').trim()
+      if(!name) return null
+      const phone = String(c.phone||'').trim()
+      const value = `${name} — ${phone || '(sem telemóvel)'}`
+      clientesDatalistValueToId.set(value, c.id)
+      return `<option value="${escapeHtml(value)}"></option>`
     })
-    .map(name=>`<option value="${name}"></option>`)
+    .filter(Boolean)
     .join('')
   dl.innerHTML = options
 }
@@ -2261,6 +2262,7 @@ qs('#form-venda').addEventListener('submit', async e=>{
   if(submitBtn) submitBtn.disabled = true
   setError('#venda-error', '')
   const customerNameRaw = qs('#venda-cliente-nome').value
+  const customerIdRaw = String(qs('#venda-cliente-id')?.value || '').trim()
   populateSociosSelect()
   const sellerId = qs('#venda-socio').value
   const quickPhone = qs('#venda-quick-telemovel').value.trim()
@@ -2287,8 +2289,17 @@ qs('#form-venda').addEventListener('submit', async e=>{
   }
 
   const customerName = v.value
-  const existing = db.customers.find(c => String(c.name||'').trim().toLowerCase() === customerName.toLowerCase())
-  if(!existing || !normalizePhone(existing.phone)){
+  const byId = customerIdRaw ? db.customers.find(c=>c.id === customerIdRaw) : null
+  const nameMatches = db.customers.filter(c => String(c.name||'').trim().toLowerCase() === customerName.toLowerCase())
+  const phoneKey = normalizePhone(quickPhone)
+  const byPhone = phoneKey ? db.customers.find(c=>normalizePhone(c.phone) === phoneKey) : null
+
+  const chosen = byId || (nameMatches.length === 1 ? nameMatches[0] : null) || byPhone || null
+  if(!chosen && nameMatches.length > 1){
+    setError('#venda-error', 'Existem vários clientes com este nome. Selecione um cliente na lista (Nome — Telemóvel).')
+    return
+  }
+  if(!chosen || !normalizePhone(chosen.phone)){
     const pv = validatePhone(quickPhone)
     if(!pv.ok){
       setError('#venda-error', pv.message)
@@ -2296,13 +2307,14 @@ qs('#form-venda').addEventListener('submit', async e=>{
     }
   }
   try{
-    if(existing && quickPhone && quickPhone !== String(existing.phone || '').trim()){
-      await updateCustomerPhone(existing.id, quickPhone)
+    if(chosen && quickPhone && quickPhone !== String(chosen.phone || '').trim()){
+      await updateCustomerPhone(chosen.id, quickPhone)
     }
-    const customerId = existing ? existing.id : (await upsertCustomer({ name: customerName, phone: quickPhone, stage: 'novo' })).id
+    const customerId = chosen ? chosen.id : (await upsertCustomer({ name: customerName, phone: quickPhone, stage: 'novo' })).id
     await addSale({ customerId, quickCustomer: null, occurredAt, amount, sellerId, paymentMethod, notes })
     e.target.reset()
     qs('#venda-cliente-nome').value = ''
+    const hid = qs('#venda-cliente-id'); if(hid) hid.value = ''
     qs('#venda-data').value = todayISO()
     populateSociosSelect()
     refreshAll()
@@ -2314,9 +2326,28 @@ qs('#form-venda').addEventListener('submit', async e=>{
   }
 })
 
+qs('#venda-cliente-nome')?.addEventListener('input', ()=>{
+  const input = qs('#venda-cliente-nome')
+  const hid = qs('#venda-cliente-id')
+  if(!input || !hid) return
+  const raw = String(input.value || '').trim()
+  if(!raw){
+    hid.value = ''
+    return
+  }
+  const id = clientesDatalistValueToId.get(raw)
+  if(id){
+    hid.value = id
+    return
+  }
+  const matches = db.customers.filter(c => String(c.name||'').trim().toLowerCase() === raw.toLowerCase())
+  hid.value = matches.length === 1 ? matches[0].id : ''
+})
+
 qs('#venda-limpar').addEventListener('click', ()=>{
   qs('#form-venda').reset()
   qs('#venda-cliente-nome').value = ''
+  const hid = qs('#venda-cliente-id'); if(hid) hid.value = ''
   qs('#venda-data').value = todayISO()
   populateSociosSelect()
   setError('#venda-error', '')
