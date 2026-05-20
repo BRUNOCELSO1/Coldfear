@@ -1058,6 +1058,25 @@ function scrollAppTop(){
   try{ window.scrollTo({ top: 0, left: 0, behavior: 'auto' }) }catch{ window.scrollTo(0,0) }
 }
 
+function bindAllSalesWheelFix(){
+  const table = qs('#all-sales-table')
+  if(!table || table.dataset.wheelFixBound) return
+  table.dataset.wheelFixBound = '1'
+  table.addEventListener('wheel', e=>{
+    if(!e || e.defaultPrevented) return
+    if(e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return
+    const dy = Number(e.deltaY || 0)
+    const dx = Number(e.deltaX || 0)
+    if(!dy || Math.abs(dy) <= Math.abs(dx)) return
+    const container = qs('.container')
+    if(!container) return
+    const maxScroll = container.scrollHeight - container.clientHeight
+    if(maxScroll <= 0) return
+    container.scrollTop = container.scrollTop + dy
+    e.preventDefault()
+  }, { passive: false })
+}
+
 function navTo(view){
   currentView = view
   setHeader(view)
@@ -2746,6 +2765,7 @@ function boot(){
     await initStorage()
     stripSellerKPIs()
     updateInvestPlatformUI()
+    bindAllSalesWheelFix()
 
     if(storageMode === 'supabase_required'){
       setLocked(true)
