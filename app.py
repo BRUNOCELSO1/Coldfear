@@ -128,9 +128,11 @@ class AppHandler(SimpleHTTPRequestHandler):
         if pathname == "/supabase-config.js":
             js = supabase_config_js()
             if js is None:
+                host = (self.headers.get("Host") or "").lower()
+                is_local = host.startswith("localhost") or host.startswith("127.0.0.1") or host.startswith("[::1]") or host.startswith("::1")
                 return self._send_text(
-                    404,
-                    "/* missing CF_SUPABASE env vars */\n",
+                    200 if is_local else 404,
+                    "/* Supabase não configurado neste ambiente */\n",
                     "application/javascript; charset=utf-8",
                 )
             return self._send_text(200, js, "application/javascript; charset=utf-8")

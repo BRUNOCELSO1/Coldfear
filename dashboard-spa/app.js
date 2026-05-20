@@ -602,6 +602,41 @@ async function initStorage(){
     saveDB(db)
   }
 }
+function seedDevDemoData(){
+  if(storageMode !== 'local') return
+  if((db.customers || []).length || (db.sales || []).length) return
+  const now = new Date()
+  const customers = Array.from({ length: 40 }).map((_, i)=>({
+    id: crypto.randomUUID(),
+    name: `Cliente ${i+1}`,
+    phone: `3519${String(10000000 + i).slice(0,8)}`,
+    source: 'Facebook',
+    profileUrl: '',
+    notes: '',
+    stage: STAGES[i % STAGES.length].id,
+    createdAt: now.toISOString(),
+    movedAt: null
+  }))
+  const sales = Array.from({ length: 220 }).map((_, i)=>{
+    const c = customers[i % customers.length]
+    const d = new Date(now)
+    d.setDate(d.getDate() - (i % 45))
+    d.setHours(12, 0, 0, 0)
+    const amount = 10 + (i % 12) * 5 + (i % 3) * 0.99
+    return {
+      id: crypto.randomUUID(),
+      customerId: c.id,
+      occurredAt: d.toISOString(),
+      amount,
+      sellerId: SELLERS[i % SELLERS.length].id,
+      paymentMethod: ['MBWAY','Cartão','Transferência'][i % 3],
+      notes: '',
+      createdAt: now.toISOString()
+    }
+  })
+  db = normalizeDB({ customers, sales, investments: [], futureClients: [] })
+  saveDB(db)
+}
 function resolveLoginEmail(rawLogin){
   const login = String(rawLogin||'').trim()
   if(!supabaseCfg) return login
@@ -2750,6 +2785,22 @@ function boot(){
 
     await loadAuthConfigScript()
     const cfg = getAuthConfig()
+    const host = String(window.location?.hostname || '').toLowerCase()
+    const isDevHost = host === 'localhost' || host === '127.0.0.1' || host === '::1'
+    const devBypass = isDevHost && new URLSearchParams(String(window.location?.search || '')).has('dev')
+    if(devBypass){
+      setAuthed(true)
+      setRole('admin')
+      applyAccessUI()
+      setLocked(false)
+      seedDevDemoData()
+      navTo('dashboard')
+      qs('#venda-data').value = todayISO()
+      qs('#invest-data').value = todayISO()
+      refreshAll()
+      renderKanban()
+      return
+    }
     const locked = !cfg || !isAuthed()
     setLocked(locked)
 

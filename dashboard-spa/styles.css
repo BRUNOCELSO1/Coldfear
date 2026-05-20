@@ -128,6 +128,7 @@ button{cursor:pointer}
 .app-shell{
   width:min(1280px, 100%);
   min-height:min(860px, calc(100vh - 52px));
+  height:min(860px, calc(100vh - 52px));
   max-height:calc(100vh - 52px);
   background:var(--surface);
   border:1px solid var(--border);
@@ -480,7 +481,8 @@ body:not(.theme-light) input[type="date"].input::-webkit-calendar-picker-indicat
 .table{
   border:1px solid var(--border);
   border-radius:var(--radius-lg);
-  overflow:auto;
+  overflow-x:auto;
+  overflow-y:hidden;
   background:rgba(15,23,42,.02);
 }
 .trow{
